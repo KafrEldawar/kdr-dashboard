@@ -65,6 +65,7 @@ declare
   v_discount    numeric(10,2) := 0;
   v_total       numeric(10,2);
   v_voucher     record;
+  v_voucher_id  uuid    := null;
   v_order_id    uuid;
 begin
   if v_uid is null then
@@ -109,7 +110,8 @@ begin
       then (v_subtotal * v_voucher.discount_value) / 100
       else v_voucher.discount_value end;
 
-    update vouchers set used_count = used_count + 1 where id = v_voucher.id;
+    v_voucher_id := v_voucher.id;
+    update vouchers set used_count = used_count + 1 where id = v_voucher_id;
   end if;
 
   v_total := greatest(v_subtotal + v_del_fee - v_discount, 0);
@@ -124,7 +126,7 @@ begin
     v_uid, v_rest_id, 'pending',
     p_delivery_address, p_contact_phone, p_notes,
     v_subtotal, v_del_fee, v_discount, v_total,
-    case when v_voucher.id is not null then v_voucher.id else null end
+    v_voucher_id
   )
   returning id into v_order_id;
 

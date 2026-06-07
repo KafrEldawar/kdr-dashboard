@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -29,13 +29,14 @@ import { formatDate } from "@/lib/format";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { adminService } from "@/services/admin";
-import { restaurantsService } from "@/services/restaurants";
+import { restaurantsService, restaurantCategoriesService } from "@/services/restaurants";
+import { categoriesService } from "@/services/categories";
 import { branchesService } from "@/services/branches";
 import { menuItemsService } from "@/services/menu";
 import { offersService } from "@/services/offers";
 import { requireSupabase } from "@/lib/supabase/client";
 import { useTranslations, useLocale } from "@/lib/i18n";
-import type { Branch, MenuItem, Offer, Restaurant, RestaurantGallery } from "@/types/database";
+import type { Branch, Category, MenuItem, Offer, Restaurant, RestaurantGallery } from "@/types/database";
 
 const schema = z.object({
   name_ar: z.string().min(2, "اسم المطعم بالعربية مطلوب"),
@@ -48,6 +49,7 @@ const schema = z.object({
   min_order_amount: z.coerce.number().min(0).optional(),
   estimated_delivery_time: z.coerce.number().min(1).optional(),
   accepts_online_orders: z.boolean().default(true).optional(),
+  category_ids: z.array(z.string()),
 });
 
 type RestaurantForm = z.infer<typeof schema>;
@@ -63,6 +65,7 @@ const defaultValues: RestaurantForm = {
   min_order_amount: 0,
   estimated_delivery_time: 30,
   accepts_online_orders: true,
+  category_ids: [],
 };
 
 function FormField({
@@ -79,6 +82,58 @@ function FormField({
       <Label>{label}</Label>
       {children}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+function CategoriesField({
+  form,
+  allCategories,
+}: {
+  form: ReturnType<typeof useForm<RestaurantForm>>;
+  allCategories: Category[];
+}) {
+  const selected = form.watch("category_ids");
+
+  function toggle(id: string) {
+    const next = selected.includes(id)
+      ? selected.filter((s) => s !== id)
+      : [...selected, id];
+    form.setValue("category_ids", next, { shouldDirty: true });
+  }
+
+  return (
+    <div className="space-y-3">
+      <Label className="flex items-center gap-2">
+        <Tag className="h-4 w-4 text-muted-foreground" />
+        التصنيفات
+      </Label>
+      {allCategories.length === 0 ? (
+        <p className="text-sm text-muted-foreground">لا توجد تصنيفات</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {allCategories.map((cat) => {
+            const isOn = selected.includes(cat.id);
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => toggle(cat.id)}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  isOn
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background text-foreground hover:border-primary/50 hover:bg-primary/5"
+                }`}
+              >
+                {cat.image_url ? (
+                  <img src={cat.image_url} alt="" className="h-4 w-4 rounded-full object-cover" />
+                ) : null}
+                {cat.name_ar}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -211,6 +266,7 @@ function RestaurantFormFields({
   submitLabel,
   onCancel,
   restaurantId,
+  allCategories,
 }: {
   form: ReturnType<typeof useForm<RestaurantForm>>;
   onSubmit: (v: RestaurantForm) => void;
@@ -218,6 +274,7 @@ function RestaurantFormFields({
   submitLabel: string;
   onCancel: () => void;
   restaurantId?: string;
+  allCategories: Category[];
 }) {
   const logoUrl = form.watch("logo_url");
   const coverUrl = form.watch("cover_url");
@@ -275,6 +332,8 @@ function RestaurantFormFields({
           <Label>قبول الطلبات أونلاين</Label>
         </div>
       </div>
+
+      <CategoriesField form={form} allCategories={allCategories} />
 
       {/* Gallery — only shown in edit mode (we have a restaurantId) */}
       {restaurantId ? (
@@ -554,13 +613,34 @@ export function RestaurantsModule() {
     queryFn: () => restaurantsService.getAll({ search: debouncedSearch, pageSize: 50 }),
   });
 
+  const allCategoriesQuery = useQuery({
+    queryKey: ["categories-list"],
+    queryFn: () => categoriesService.getAll({ pageSize: 100 }),
+  });
+
+  const restaurantCategoriesQuery = useQuery({
+    queryKey: ["restaurant-categories", editingRestaurant?.id],
+    queryFn: () =>
+      editingRestaurant
+        ? restaurantCategoriesService.getCategoryIds(editingRestaurant.id)
+        : Promise.resolve([]),
+    enabled: Boolean(editingRestaurant),
+  });
+
   const editForm = useForm<RestaurantForm>({ resolver: zodResolver(schema), defaultValues });
+
+  // Populate category_ids when query resolves
+  useEffect(() => {
+    if (restaurantCategoriesQuery.data && editingRestaurant) {
+      editForm.setValue("category_ids", restaurantCategoriesQuery.data);
+    }
+  }, [restaurantCategoriesQuery.data]);
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["restaurants"] });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, values }: { id: string; values: RestaurantForm }) =>
-      restaurantsService.update(id, {
+    mutationFn: async ({ id, values }: { id: string; values: RestaurantForm }) => {
+      await restaurantsService.update(id, {
         name_ar: values.name_ar,
         name_en: values.name_en,
         description_ar: values.description_ar || null,
@@ -571,7 +651,9 @@ export function RestaurantsModule() {
         min_order_amount: values.min_order_amount,
         estimated_delivery_time: values.estimated_delivery_time,
         accepts_online_orders: values.accepts_online_orders ?? true,
-      }),
+      });
+      await restaurantCategoriesService.syncCategories(id, values.category_ids);
+    },
     onSuccess: () => {
       toast.success(t("restaurants.updatedSuccess"));
       setEditingRestaurant(null);
@@ -651,7 +733,6 @@ export function RestaurantsModule() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  setEditingRestaurant(r);
                   editForm.reset({
                     name_ar: r.name_ar,
                     name_en: r.name_en,
@@ -663,7 +744,9 @@ export function RestaurantsModule() {
                     min_order_amount: r.min_order_amount,
                     estimated_delivery_time: r.estimated_delivery_time,
                     accepts_online_orders: r.accepts_online_orders,
+                    category_ids: [],   // populated by restaurantCategoriesQuery
                   });
+                  setEditingRestaurant(r);
                 }}
               >
                 <Edit className="h-4 w-4" />
@@ -743,6 +826,7 @@ export function RestaurantsModule() {
           submitLabel={t("common.save")}
           onCancel={() => setEditingRestaurant(null)}
           restaurantId={editingRestaurant?.id}
+          allCategories={allCategoriesQuery.data?.data ?? []}
         />
       </FullScreenDialog>
 

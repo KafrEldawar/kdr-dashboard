@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Edit, Trash2, Plus } from "lucide-react";
+import { Edit, Trash2, Plus, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,7 @@ import { SearchInput } from "@/components/shared/search-input";
 import { FullScreenDialog } from "@/components/shared/full-screen-dialog";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { branchesService } from "@/services/branches";
+import { branchesService, branchPhonesService } from "@/services/branches";
 import { restaurantsService } from "@/services/restaurants";
 import { useTranslations, useLocale } from "@/lib/i18n";
 import type { Branch, Restaurant } from "@/types/database";
@@ -39,6 +39,7 @@ const schema = z.object({
   address_ar: z.string().min(3, "العنوان بالعربية مطلوب"),
   address_en: z.string().min(3, "Address in English is required"),
   location_url: z.string().url("رابط الموقع غير صحيح").optional().or(z.literal("")),
+  phones: z.array(z.string()),
 });
 
 type BranchForm = z.infer<typeof schema>;
@@ -50,6 +51,7 @@ const defaultValues: BranchForm = {
   address_ar: "",
   address_en: "",
   location_url: "",
+  phones: [],
 };
 
 function FormField({
@@ -66,6 +68,55 @@ function FormField({
       <Label>{label}</Label>
       {children}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+function PhonesField({ form }: { form: ReturnType<typeof useForm<BranchForm>> }) {
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "phones" as never,
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Phone className="h-4 w-4 text-muted-foreground" />
+        <Label>أرقام الهاتف</Label>
+      </div>
+      {fields.length === 0 ? (
+        <p className="text-sm text-muted-foreground">لا توجد أرقام</p>
+      ) : (
+        <div className="space-y-2">
+          {fields.map((field, index) => (
+            <div key={field.id} className="flex items-center gap-2">
+              <Input
+                {...form.register(`phones.${index}`)}
+                type="tel"
+                dir="ltr"
+                placeholder="01xxxxxxxxx"
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="destructive"
+                onClick={() => remove(index)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => append("")}
+      >
+        <Plus className="h-4 w-4" /> إضافة رقم
+      </Button>
     </div>
   );
 }
@@ -128,6 +179,8 @@ function BranchFormFields({
         </div>
       </div>
 
+      <PhonesField form={form} />
+
       <div className="flex gap-3">
         <Button type="submit" disabled={isPending}>
           {isPending ? "جاري الحفظ…" : submitLabel}
@@ -149,6 +202,7 @@ export function BranchesModule() {
   const [addOpen, setAddOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [deletingBranch, setDeletingBranch] = useState<Branch | null>(null);
+  const [editBranchId, setEditBranchId] = useState<string | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
   const branchesQuery = useQuery({
@@ -161,23 +215,43 @@ export function BranchesModule() {
     queryFn: () => restaurantsService.getAll({ pageSize: 100 }),
   });
 
+  const phonesQuery = useQuery({
+    queryKey: ["branch-phones", editBranchId],
+    queryFn: () =>
+      editBranchId
+        ? branchPhonesService.getByBranchId(editBranchId)
+        : Promise.resolve([]),
+    enabled: !!editBranchId,
+  });
+
   const restaurants = restaurantsQuery.data?.data ?? [];
 
   const createForm = useForm<BranchForm>({ resolver: zodResolver(schema), defaultValues });
   const editForm = useForm<BranchForm>({ resolver: zodResolver(schema), defaultValues });
 
+  useEffect(() => {
+    if (phonesQuery.data && editingBranch) {
+      editForm.setValue("phones", phonesQuery.data.map((p) => p.phone));
+    }
+  }, [phonesQuery.data]);
+
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["branches"] });
 
   const createMutation = useMutation({
-    mutationFn: (values: BranchForm) =>
-      branchesService.create({
+    mutationFn: async (values: BranchForm) => {
+      const result = await branchesService.create({
         restaurant_id: values.restaurant_id,
         name_ar: values.name_ar || null,
         name_en: values.name_en || null,
         address_ar: values.address_ar,
         address_en: values.address_en,
         location_url: values.location_url || null,
-      }),
+      });
+      const filteredPhones = values.phones.filter(Boolean);
+      if (filteredPhones.length > 0) {
+        await branchPhonesService.syncPhones(result.data.id, filteredPhones);
+      }
+    },
     onSuccess: () => {
       toast.success(t("branches.createdSuccess"));
       createForm.reset(defaultValues);
@@ -188,17 +262,20 @@ export function BranchesModule() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, values }: { id: string; values: BranchForm }) =>
-      branchesService.update(id, {
+    mutationFn: async ({ id, values }: { id: string; values: BranchForm }) => {
+      await branchesService.update(id, {
         name_ar: values.name_ar || null,
         name_en: values.name_en || null,
         address_ar: values.address_ar,
         address_en: values.address_en,
         location_url: values.location_url || null,
-      }),
+      });
+      await branchPhonesService.syncPhones(id, values.phones.filter(Boolean));
+    },
     onSuccess: () => {
       toast.success(t("branches.updatedSuccess"));
       setEditingBranch(null);
+      setEditBranchId(null);
       refresh();
     },
     onError: (error) => toast.error(toAppError(error).message),
@@ -262,6 +339,7 @@ export function BranchesModule() {
                 variant="outline"
                 onClick={() => {
                   setEditingBranch(b);
+                  setEditBranchId(b.id);
                   editForm.reset({
                     restaurant_id: b.restaurant_id,
                     name_ar: b.name_ar || "",
@@ -269,6 +347,7 @@ export function BranchesModule() {
                     address_ar: b.address_ar,
                     address_en: b.address_en,
                     location_url: b.location_url || "",
+                    phones: [],
                   });
                 }}
               >
@@ -338,7 +417,12 @@ export function BranchesModule() {
       {/* Edit Dialog */}
       <FullScreenDialog
         open={Boolean(editingBranch)}
-        onOpenChange={(open) => !open && setEditingBranch(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingBranch(null);
+            setEditBranchId(null);
+          }
+        }}
         title={t("branches.edit")}
         description={
           editingBranch
@@ -354,7 +438,10 @@ export function BranchesModule() {
           }
           isPending={updateMutation.isPending}
           submitLabel={t("common.save")}
-          onCancel={() => setEditingBranch(null)}
+          onCancel={() => {
+            setEditingBranch(null);
+            setEditBranchId(null);
+          }}
           lockRestaurant
         />
       </FullScreenDialog>

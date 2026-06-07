@@ -180,14 +180,20 @@ export function MenuItemsModule() {
   const locale = useLocale();
 
   const [search, setSearch] = useState("");
+  const [restaurantFilter, setRestaurantFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<MenuItem | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
   const itemsQuery = useQuery({
-    queryKey: ["menu-items", debouncedSearch],
-    queryFn: () => menuItemsService.getAll({ search: debouncedSearch, pageSize: 50 }),
+    queryKey: ["menu-items", debouncedSearch, restaurantFilter],
+    queryFn: () =>
+      menuItemsService.getAll({
+        search: debouncedSearch,
+        pageSize: 50,
+        filters: restaurantFilter !== "all" ? { restaurant_id: restaurantFilter } : undefined,
+      }),
   });
 
   const restaurantsQuery = useQuery({
@@ -288,6 +294,14 @@ export function MenuItemsModule() {
           locale === "ar" ? row.original.name_ar || "—" : row.original.name_en || "—",
       },
       {
+        id: "restaurant",
+        header: "المطعم",
+        cell: ({ row }) => {
+          const r = restaurants.find((r) => r.id === row.original.restaurant_id);
+          return r ? (locale === "ar" ? r.name_ar : r.name_en) : "—";
+        },
+      },
+      {
         accessorKey: "price",
         header: t("menuItems.field.price"),
         cell: ({ row }) => `${row.original.price} ج.م`,
@@ -340,7 +354,7 @@ export function MenuItemsModule() {
         },
       },
     ],
-    [t, locale, editForm, toggleMutation]
+    [t, locale, editForm, toggleMutation, restaurants]
   );
 
   return (
@@ -357,7 +371,24 @@ export function MenuItemsModule() {
       />
 
       <div className="mb-4 rounded-lg border bg-background p-4">
-        <SearchInput value={search} onChange={setSearch} placeholder={t("menuItems.searchPlaceholder")} />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex-1">
+            <SearchInput value={search} onChange={setSearch} placeholder={t("menuItems.searchPlaceholder")} />
+          </div>
+          <Select value={restaurantFilter} onValueChange={setRestaurantFilter}>
+            <SelectTrigger className="w-full sm:w-56">
+              <SelectValue placeholder="كل المطاعم" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل المطاعم</SelectItem>
+              {restaurants.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.name_ar} / {r.name_en}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {itemsQuery.isLoading ? <LoadingState /> : null}

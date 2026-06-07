@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import {
   Check, ChevronRight, ChevronLeft, Plus, Trash2,
-  Building2, UtensilsCrossed, Store, ClipboardList, Images,
+  Building2, UtensilsCrossed, Store, ClipboardList, Images, Phone,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { ImageUploader } from "@/components/shared/image-uploader";
 import { adminService } from "@/services/admin";
-import { branchesService } from "@/services/branches";
+import { branchesService, branchPhonesService } from "@/services/branches";
 import { menuItemsService } from "@/services/menu";
 import { categoriesService } from "@/services/categories";
 import { requireSupabase } from "@/lib/supabase/client";
@@ -40,6 +40,7 @@ type DraftBranch = {
   address_ar: string;
   address_en: string;
   location_url: string;
+  phones: string[];
 };
 
 type DraftMenuItem = {
@@ -82,6 +83,7 @@ const branchSchema = z.object({
   address_ar: z.string().min(3, "العنوان بالعربية مطلوب"),
   address_en: z.string().min(3, "Address in English is required"),
   location_url: z.string().url("رابط غير صحيح").optional().or(z.literal("")),
+  phones: z.array(z.string()),
 });
 
 const menuItemSchema = z.object({
@@ -118,6 +120,7 @@ const branchDefaults: BranchForm = {
   address_ar: "",
   address_en: "",
   location_url: "",
+  phones: [],
 };
 
 const menuItemDefaults: MenuItemForm = {
@@ -200,13 +203,24 @@ function StepIndicator({ current }: { current: number }) {
 
 function StepInfo({
   form,
+  selectedCategoryIds,
+  onCategoryToggle,
   onNext,
 }: {
   form: ReturnType<typeof useForm<InfoForm>>;
+  selectedCategoryIds: string[];
+  onCategoryToggle: (id: string) => void;
   onNext: () => void;
 }) {
   const logoUrl = form.watch("logo_url");
   const coverUrl = form.watch("cover_url");
+  const locale = useLocale();
+
+  const categoriesQuery = useQuery({
+    queryKey: ["categories-list"],
+    queryFn: () => categoriesService.getAll({ pageSize: 100 }),
+  });
+  const categories = categoriesQuery.data?.data ?? [];
 
   return (
     <form className="mx-auto max-w-2xl space-y-6 p-6" onSubmit={form.handleSubmit(onNext)}>
@@ -260,12 +274,98 @@ function StepInfo({
         </div>
       </div>
 
+      {/* Categories multi-select */}
+      <div className="space-y-2">
+        <Label>تصنيفات المطعم (اختياري)</Label>
+        {categoriesQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">جاري التحميل…</p>
+        ) : categories.length === 0 ? (
+          <p className="text-sm text-muted-foreground">لا توجد تصنيفات</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {categories.map((cat) => {
+              const selected = selectedCategoryIds.includes(cat.id);
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => onCategoryToggle(cat.id)}
+                  className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                    selected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {locale === "ar" ? cat.name_ar : cat.name_en}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {selectedCategoryIds.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            تم اختيار {selectedCategoryIds.length} تصنيف
+          </p>
+        )}
+      </div>
+
       <div className="flex justify-end">
         <Button type="submit">
           التالي <ChevronLeft className="h-4 w-4" />
         </Button>
       </div>
     </form>
+  );
+}
+
+// ── PhonesField (wizard inline) ───────────────────────────────────────────────
+
+function WizardPhonesField({ form }: { form: ReturnType<typeof useForm<BranchForm>> }) {
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "phones" as never,
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Phone className="h-4 w-4 text-muted-foreground" />
+        <Label>أرقام الهاتف</Label>
+      </div>
+      {fields.length === 0 ? (
+        <p className="text-sm text-muted-foreground">لا توجد أرقام</p>
+      ) : (
+        <div className="space-y-2">
+          {fields.map((field, index) => (
+            <div key={field.id} className="flex items-center gap-2">
+              <Input
+                {...form.register(`phones.${index}`)}
+                type="tel"
+                dir="ltr"
+                placeholder="01xxxxxxxxx"
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="destructive"
+                onClick={() => remove(index)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => append("")}
+      >
+        <Plus className="h-4 w-4" /> إضافة رقم
+      </Button>
+    </div>
   );
 }
 
@@ -295,6 +395,7 @@ function StepBranches({
       address_ar: values.address_ar,
       address_en: values.address_en,
       location_url: values.location_url ?? "",
+      phones: values.phones ?? [],
     });
     form.reset(branchDefaults);
   }
@@ -318,6 +419,12 @@ function StepBranches({
                 <p className="text-xs text-muted-foreground">
                   {locale === "ar" ? b.address_ar : b.address_en}
                 </p>
+                {b.phones.length > 0 && (
+                  <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                    <Phone className="h-3 w-3" />
+                    {b.phones.filter(Boolean).length} رقم هاتف
+                  </p>
+                )}
               </div>
               <Button type="button" size="icon" variant="ghost" onClick={() => onRemove(b._id)}>
                 <Trash2 className="h-4 w-4 text-destructive" />
@@ -348,6 +455,9 @@ function StepBranches({
             <FormField label="رابط الخريطة (اختياري)" error={form.formState.errors.location_url?.message}>
               <Input {...form.register("location_url")} dir="ltr" placeholder="https://maps.google.com/..." />
             </FormField>
+          </div>
+          <div className="sm:col-span-2">
+            <WizardPhonesField form={form} />
           </div>
           <div className="sm:col-span-2">
             <Button type="submit" variant="outline" size="sm">
@@ -643,6 +753,7 @@ function StepReview({
   branches,
   items,
   photos,
+  selectedCategoryIds,
   onBack,
   onSubmit,
   isSubmitting,
@@ -651,11 +762,18 @@ function StepReview({
   branches: DraftBranch[];
   items: DraftMenuItem[];
   photos: DraftGalleryPhoto[];
+  selectedCategoryIds: string[];
   onBack: () => void;
   onSubmit: () => void;
   isSubmitting: boolean;
 }) {
   const locale = useLocale();
+  const categoriesQuery = useQuery({
+    queryKey: ["categories-list"],
+    queryFn: () => categoriesService.getAll({ pageSize: 100 }),
+  });
+  const allCategories = categoriesQuery.data?.data ?? [];
+  const selectedCategories = allCategories.filter((c) => selectedCategoryIds.includes(c.id));
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
@@ -692,6 +810,20 @@ function StepReview({
           </div>
         </div>
       </div>
+
+      {/* Categories */}
+      {selectedCategories.length > 0 && (
+        <div className="rounded-xl border p-4">
+          <p className="mb-2 text-sm font-semibold">التصنيفات ({selectedCategories.length})</p>
+          <div className="flex flex-wrap gap-2">
+            {selectedCategories.map((c) => (
+              <Badge key={c.id} variant="secondary">
+                {locale === "ar" ? c.name_ar : c.name_en}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Branches */}
       <div className="rounded-xl border p-4">
@@ -795,7 +927,14 @@ export function AddRestaurantWizard({ onSuccess, onCancel }: AddRestaurantWizard
   const [branches, setBranches] = useState<DraftBranch[]>([]);
   const [menuItems, setMenuItems] = useState<DraftMenuItem[]>([]);
   const [galleryPhotos, setGalleryPhotos] = useState<DraftGalleryPhoto[]>([]);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function toggleCategory(id: string) {
+    setSelectedCategoryIds((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+    );
+  }
 
   const infoForm = useForm<InfoForm>({
     resolver: zodResolver(infoSchema),
@@ -817,6 +956,7 @@ export function AddRestaurantWizard({ onSuccess, onCancel }: AddRestaurantWizard
         deliveryFee: infoData.delivery_fee,
         minOrderAmount: infoData.min_order_amount,
         acceptsOnline: infoData.accepts_online_orders,
+        categoryIds: selectedCategoryIds.length > 0 ? selectedCategoryIds : undefined,
       })) as { id?: string } | null;
 
       const restaurantId = (result as { id?: string } | null)?.id;
@@ -828,7 +968,7 @@ export function AddRestaurantWizard({ onSuccess, onCancel }: AddRestaurantWizard
       // 2. Branches
       for (const b of branches) {
         try {
-          await branchesService.create({
+          const branchResult = await branchesService.create({
             restaurant_id: restaurantId,
             name_ar: b.name_ar || null,
             name_en: b.name_en || null,
@@ -836,6 +976,11 @@ export function AddRestaurantWizard({ onSuccess, onCancel }: AddRestaurantWizard
             address_en: b.address_en,
             location_url: b.location_url || null,
           });
+          const branchId = branchResult.data.id;
+          const filteredPhones = b.phones.filter(Boolean);
+          if (filteredPhones.length > 0) {
+            await branchPhonesService.syncPhones(branchId, filteredPhones);
+          }
         } catch {
           errors.push(`فرع: ${b.name_ar || b.address_ar}`);
         }
@@ -895,7 +1040,14 @@ export function AddRestaurantWizard({ onSuccess, onCancel }: AddRestaurantWizard
     <div className="flex h-full flex-col">
       <StepIndicator current={step} />
       <div className="flex-1 overflow-y-auto">
-        {step === 0 && <StepInfo form={infoForm} onNext={() => setStep(1)} />}
+        {step === 0 && (
+          <StepInfo
+            form={infoForm}
+            selectedCategoryIds={selectedCategoryIds}
+            onCategoryToggle={toggleCategory}
+            onNext={() => setStep(1)}
+          />
+        )}
         {step === 1 && (
           <StepBranches
             branches={branches}
@@ -932,6 +1084,7 @@ export function AddRestaurantWizard({ onSuccess, onCancel }: AddRestaurantWizard
             branches={branches}
             items={menuItems}
             photos={galleryPhotos}
+            selectedCategoryIds={selectedCategoryIds}
             onBack={() => setStep(3)}
             onSubmit={handleCreate}
             isSubmitting={isSubmitting}

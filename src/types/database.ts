@@ -134,6 +134,18 @@ export type BranchInsert = {
 
 export type BranchUpdate = Partial<Omit<BranchInsert, "restaurant_id">>;
 
+export type BranchPhone = {
+  id: string;
+  branch_id: string;
+  phone: string;
+  created_at: string;
+};
+
+export type BranchPhoneInsert = {
+  branch_id: string;
+  phone: string;
+};
+
 export type MenuItem = {
   id: string;
   restaurant_id: string;
@@ -383,7 +395,7 @@ export type Database = {
       restaurant_owners: TableDefinition<RestaurantOwner, Partial<RestaurantOwner>, Partial<RestaurantOwner>>;
       restaurant_categories: TableDefinition<GenericRow, GenericRow, GenericRow>;
       branches: TableDefinition<Branch, BranchInsert, BranchUpdate>;
-      branch_phones: TableDefinition<GenericRow, GenericRow, GenericRow>;
+      branch_phones: TableDefinition<BranchPhone, BranchPhoneInsert, Partial<BranchPhoneInsert>>;
       menu_items: TableDefinition<MenuItem, MenuItemInsert, MenuItemUpdate>;
       restaurant_gallery: TableDefinition<RestaurantGallery, RestaurantGalleryInsert, RestaurantGalleryUpdate>;
       offers: TableDefinition<Offer, OfferInsert, OfferUpdate>;

@@ -10,6 +10,7 @@ export type ImageUploadType =
   | "menu_item"
   | "category"
   | "offer"
+  | "gallery"
   | "avatar";
 
 type ImageUploaderProps = {
