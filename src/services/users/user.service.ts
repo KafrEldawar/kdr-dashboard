@@ -3,6 +3,12 @@ import { createTableService } from "@/services/base-table.service";
 import type { QueryParams } from "@/types/service";
 import type { Profile, ProfileInsert, ProfileUpdate, UserRole } from "@/types/database";
 
+export type RestaurantOption = {
+  id: string;
+  name_ar: string;
+  ownerUserId: string | null;
+};
+
 const baseProfilesService = createTableService({
   table: "profiles",
   defaultSort: "created_at",
@@ -69,6 +75,36 @@ export const usersService = {
 
   async toggleActive(user: Profile) {
     return baseProfilesService.update(user.id, { is_active: !user.is_active });
+  },
+
+  async getRestaurantsForOwnerSelect(): Promise<RestaurantOption[]> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = requireSupabase() as any;
+    const [restResult, ownersResult] = await Promise.all([
+      supabase.from("restaurants").select("id, name_ar").order("name_ar"),
+      supabase.from("restaurant_owners").select("restaurant_id, user_id"),
+    ]);
+    if (restResult.error) throw restResult.error;
+    const owners = (ownersResult.data ?? []) as Array<{ restaurant_id: string; user_id: string }>;
+    const ownerMap = new Map(owners.map((o) => [o.restaurant_id, o.user_id]));
+    const restaurants = (restResult.data ?? []) as Array<{ id: string; name_ar: string }>;
+    return restaurants.map((r) => ({
+      id: r.id,
+      name_ar: r.name_ar,
+      ownerUserId: ownerMap.get(r.id) ?? null,
+    }));
+  },
+
+  async linkOwnerToRestaurant(userId: string, restaurantId: string): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = requireSupabase() as any;
+    const { data, error } = await supabase.rpc("rpc_admin_link_owner_to_restaurant", {
+      p_user_id: userId,
+      p_restaurant_id: restaurantId,
+    });
+    if (error) throw error;
+    const result = data as { error?: string; success?: boolean } | null;
+    if (result?.error) throw new Error(result.error);
   },
 
   async getRelatedOrders(userId: string) {

@@ -29,22 +29,35 @@ import { formatDate } from "@/lib/format";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usersService } from "@/services/users";
+import type { RestaurantOption } from "@/services/users";
 import { useTranslations, useLocale } from "@/lib/i18n";
 import type { Profile, UserRole } from "@/types/database";
 
-const createUserSchema = z.object({
-  full_name: z.string().min(2, "اكتب اسم واضح"),
-  email: z.string().email("اكتب بريد صحيح"),
-  phone: z.string().optional(),
-  role: z.enum(["customer", "restaurant", "admin"]),
-  password: z.string().min(6, "كلمة المرور لازم تكون 6 حروف على الأقل"),
-});
+const createUserSchema = z
+  .object({
+    full_name: z.string().min(2, "اكتب اسم واضح"),
+    email: z.string().email("اكتب بريد صحيح"),
+    phone: z.string().optional(),
+    role: z.enum(["customer", "restaurant", "admin"]),
+    password: z.string().min(6, "كلمة المرور لازم تكون 6 حروف على الأقل"),
+    restaurant_id: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.role === "restaurant" && !data.restaurant_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "لازم تختار المطعم المرتبط بصاحب المطعم دا",
+        path: ["restaurant_id"],
+      });
+    }
+  });
 
 const editUserSchema = z.object({
   full_name: z.string().min(2, "اكتب اسم واضح"),
   phone: z.string().optional(),
   role: z.enum(["customer", "restaurant", "admin"]),
   is_active: z.boolean(),
+  restaurant_id: z.string().optional(),
 });
 
 type CreateUserForm = z.infer<typeof createUserSchema>;
@@ -90,43 +103,66 @@ export function UsersModule() {
     enabled: Boolean(selectedUser),
   });
 
+  const restaurantsQuery = useQuery({
+    queryKey: ["restaurants-for-owner-select"],
+    queryFn: () => usersService.getRestaurantsForOwnerSelect(),
+  });
+
   const createForm = useForm<CreateUserForm>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: { full_name: "", email: "", phone: "", role: "customer", password: "Test123456" },
+    defaultValues: { full_name: "", email: "", phone: "", role: "customer", password: "Test123456", restaurant_id: "" },
   });
 
   const editForm = useForm<EditUserForm>({
     resolver: zodResolver(editUserSchema),
-    defaultValues: { full_name: "", phone: "", role: "customer", is_active: true },
+    defaultValues: { full_name: "", phone: "", role: "customer", is_active: true, restaurant_id: "" },
   });
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["users"] });
 
   const createMutation = useMutation({
-    mutationFn: (values: CreateUserForm) =>
-      usersService.createTestUser({
+    mutationFn: async (values: CreateUserForm) => {
+      const result = await usersService.createTestUser({
         full_name: values.full_name,
         email: values.email,
         phone: values.phone,
         role: values.role,
         password: values.password,
-      }),
+      });
+      if (values.role === "restaurant" && values.restaurant_id) {
+        await usersService.linkOwnerToRestaurant(result.data.id, values.restaurant_id);
+      }
+      return result;
+    },
     onSuccess: () => {
       toast.success(t("users.createdSuccess"));
-      createForm.reset({ full_name: "", email: "", phone: "", role: "customer", password: "Test123456" });
+      createForm.reset({ full_name: "", email: "", phone: "", role: "customer", password: "Test123456", restaurant_id: "" });
+      void queryClient.invalidateQueries({ queryKey: ["restaurants-for-owner-select"] });
       refresh();
     },
     onError: (error) => toast.error(toAppError(error).message),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, values }: { id: string; values: EditUserForm }) =>
-      usersService.update(id, {
+    mutationFn: async ({ id, values, previousRole }: { id: string; values: EditUserForm; previousRole: UserRole }) => {
+      if (values.role === "restaurant" && previousRole !== "restaurant") {
+        if (!values.restaurant_id) throw new Error("لازم تختار المطعم المرتبط بصاحب المطعم دا");
+        await usersService.update(id, {
+          full_name: values.full_name,
+          phone: values.phone || null,
+          is_active: values.is_active,
+        });
+        await usersService.linkOwnerToRestaurant(id, values.restaurant_id);
+        void queryClient.invalidateQueries({ queryKey: ["restaurants-for-owner-select"] });
+        return;
+      }
+      return usersService.update(id, {
         full_name: values.full_name,
         phone: values.phone || null,
         role: values.role,
         is_active: values.is_active,
-      }),
+      });
+    },
     onSuccess: () => {
       toast.success(t("users.updatedSuccess"));
       setEditingUser(null);
@@ -200,6 +236,7 @@ export function UsersModule() {
                     phone: user.phone ?? "",
                     role: user.role,
                     is_active: user.is_active,
+                    restaurant_id: "",
                   });
                 }}
               >
@@ -251,7 +288,10 @@ export function UsersModule() {
               <FormField label="الدور" error={createForm.formState.errors.role?.message}>
                 <Select
                   value={createForm.watch("role")}
-                  onValueChange={(v) => createForm.setValue("role", v as UserRole)}
+                  onValueChange={(v) => {
+                    createForm.setValue("role", v as UserRole);
+                    createForm.setValue("restaurant_id", "");
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -263,6 +303,33 @@ export function UsersModule() {
                   </SelectContent>
                 </Select>
               </FormField>
+              {createForm.watch("role") === "restaurant" ? (
+                <FormField
+                  label="المطعم المرتبط"
+                  error={(createForm.formState.errors as Record<string, { message?: string }>).restaurant_id?.message}
+                >
+                  <Select
+                    value={createForm.watch("restaurant_id") ?? ""}
+                    onValueChange={(v) => createForm.setValue("restaurant_id", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختار المطعم..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(restaurantsQuery.data ?? []).map((r: RestaurantOption) => (
+                        <SelectItem
+                          key={r.id}
+                          value={r.id}
+                          disabled={r.ownerUserId !== null}
+                        >
+                          {r.name_ar}
+                          {r.ownerUserId !== null ? " (مرتبط بصاحب)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              ) : null}
               <FormField label="كلمة المرور" error={createForm.formState.errors.password?.message}>
                 <Input {...createForm.register("password")} dir="ltr" type="text" />
               </FormField>
@@ -325,7 +392,7 @@ export function UsersModule() {
             <form
               className="grid gap-4 md:grid-cols-2"
               onSubmit={editForm.handleSubmit((v) =>
-                updateMutation.mutate({ id: editingUser.id, values: v })
+                updateMutation.mutate({ id: editingUser.id, values: v, previousRole: editingUser.role })
               )}
             >
               <FormField label="الاسم الكامل" error={editForm.formState.errors.full_name?.message}>
@@ -337,7 +404,11 @@ export function UsersModule() {
               <FormField label="الدور" error={editForm.formState.errors.role?.message}>
                 <Select
                   value={editForm.watch("role")}
-                  onValueChange={(v) => editForm.setValue("role", v as UserRole)}
+                  onValueChange={(v) => {
+                    editForm.setValue("role", v as UserRole);
+                    editForm.setValue("restaurant_id", "");
+                  }}
+                  disabled={editingUser?.role === "restaurant"}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -348,7 +419,45 @@ export function UsersModule() {
                     <SelectItem value="admin">أدمن</SelectItem>
                   </SelectContent>
                 </Select>
+                {editingUser?.role === "restaurant" ? (
+                  <p className="text-xs text-muted-foreground">الدور مرتبط بمطعم — غيّره من صفحة المطعم</p>
+                ) : null}
               </FormField>
+              {editingUser?.role !== "restaurant" && editForm.watch("role") === "restaurant" ? (
+                <div className="md:col-span-2">
+                  <FormField
+                    label="المطعم المرتبط"
+                    error={(editForm.formState.errors as Record<string, { message?: string }>).restaurant_id?.message}
+                  >
+                    <Select
+                      value={editForm.watch("restaurant_id") ?? ""}
+                      onValueChange={(v) => editForm.setValue("restaurant_id", v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="اختار المطعم..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(restaurantsQuery.data ?? []).map((r: RestaurantOption) => (
+                          <SelectItem
+                            key={r.id}
+                            value={r.id}
+                            disabled={r.ownerUserId !== null}
+                          >
+                            {r.name_ar}
+                            {r.ownerUserId !== null ? " (مرتبط بصاحب)" : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                </div>
+              ) : null}
+              {editingUser?.role === "restaurant" ? (
+                <div className="md:col-span-2 rounded-md border bg-muted/30 p-3 text-sm">
+                  <span className="font-semibold">المطعم المرتبط: </span>
+                  {restaurantsQuery.data?.find((r: RestaurantOption) => r.ownerUserId === editingUser.id)?.name_ar ?? "غير محدد"}
+                </div>
+              ) : null}
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -382,6 +491,12 @@ export function UsersModule() {
               <p><span className="font-semibold">الاسم: </span>{selectedUser.full_name || "—"}</p>
               <p><span className="font-semibold">الموبايل: </span>{selectedUser.phone || "—"}</p>
               <p><span className="font-semibold">الدور: </span>{selectedUser.role}</p>
+              {selectedUser.role === "restaurant" ? (
+                <p>
+                  <span className="font-semibold">المطعم المرتبط: </span>
+                  {restaurantsQuery.data?.find((r: RestaurantOption) => r.ownerUserId === selectedUser.id)?.name_ar ?? "غير محدد"}
+                </p>
+              ) : null}
               <p><span className="font-semibold">الجنس: </span>{selectedUser.gender || "—"}</p>
               <p><span className="font-semibold">نشط: </span>{selectedUser.is_active ? "✅" : "❌"}</p>
             </div>
