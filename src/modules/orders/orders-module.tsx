@@ -29,20 +29,26 @@ import type { Order, OrderStatus } from "@/types/database";
 const statusLabels: Record<OrderStatus, string> = {
   pending: "قيد الانتظار",
   preparing: "قيد التحضير",
+  ready_for_pickup: "جاهز للاستلام",
   out_for_delivery: "في الطريق",
   delivered: "تم التسليم",
+  picked_up_by_customer: "استلمه العميل",
+  rejected: "مرفوض",
   cancelled: "ملغي",
 };
 
 const statusVariants: Record<OrderStatus, "default" | "secondary" | "destructive" | "outline"> = {
   pending: "outline",
   preparing: "secondary",
+  ready_for_pickup: "secondary",
   out_for_delivery: "default",
   delivered: "default",
+  picked_up_by_customer: "default",
+  rejected: "destructive",
   cancelled: "destructive",
 };
 
-const ALL_STATUSES: OrderStatus[] = ["pending", "preparing", "out_for_delivery", "delivered", "cancelled"];
+const ALL_STATUSES: OrderStatus[] = ["pending", "preparing", "ready_for_pickup", "out_for_delivery", "delivered", "picked_up_by_customer", "rejected", "cancelled"];
 
 export function OrdersModule() {
   const queryClient = useQueryClient();

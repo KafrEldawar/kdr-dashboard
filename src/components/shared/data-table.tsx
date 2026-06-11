@@ -36,7 +36,7 @@ export function DataTable<TData, TValue>({
     getCoreRowModel: getCoreRowModel(),
   });
 
-  if (data.length === 0) {
+  if (!data || data.length === 0) {
     return <EmptyState title={emptyTitle ?? t("common.noResults")} />;
   }
 

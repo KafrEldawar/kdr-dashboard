@@ -14,9 +14,18 @@ type TableDefinition<Row, Insert, Update> = {
 };
 
 // ── Enums ─────────────────────────────────────────────────────
-export type UserRole = "customer" | "restaurant" | "admin";
+export type UserRole = "customer" | "restaurant" | "driver" | "admin";
 export type GenderType = "male" | "female";
-export type OrderStatus = "pending" | "preparing" | "out_for_delivery" | "delivered" | "cancelled";
+export type OrderStatus =
+  | "pending"
+  | "preparing"
+  | "ready_for_pickup"
+  | "out_for_delivery"
+  | "delivered"
+  | "picked_up_by_customer"
+  | "rejected"
+  | "cancelled";
+export type OrderType = "delivery" | "pickup";
 export type DiscountTypeEnum = "fixed" | "percentage";
 export type NotificationTarget = "all_customers" | "all_restaurants" | "platform_android" | "platform_ios" | "custom";
 export type DevicePlatform = "android" | "ios" | "web";
@@ -80,8 +89,7 @@ export type Restaurant = {
   accepts_online_orders: boolean;
   is_accepting_orders: boolean;
   estimated_delivery_time: number;
-  delivery_fee: number;
-  min_order_amount: number;
+  commission_percentage: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -97,8 +105,7 @@ export type RestaurantInsert = {
   accepts_online_orders?: boolean;
   is_accepting_orders?: boolean;
   estimated_delivery_time?: number;
-  delivery_fee?: number;
-  min_order_amount?: number;
+  commission_percentage?: number;
   is_active?: boolean;
 };
 
@@ -262,7 +269,8 @@ export type Order = {
   user_id: string;
   restaurant_id: string;
   status: OrderStatus;
-  delivery_address: string;
+  order_type: OrderType;
+  delivery_address: string | null;
   contact_phone: string;
   subtotal: number;
   delivery_fee: number;
@@ -270,6 +278,16 @@ export type Order = {
   total_amount: number;
   voucher_id: string | null;
   notes: string | null;
+  accepted_at: string | null;
+  estimated_preparation_minutes: number | null;
+  rejection_reason: string | null;
+  driver_id: string | null;
+  claimed_at: string | null;
+  picked_up_at: string | null;
+  delivered_at: string | null;
+  commission_percentage: number;
+  commission_amount: number;
+  restaurant_revenue: number;
   restaurant_rating: number | null;
   restaurant_review: string | null;
   rated_at: string | null;

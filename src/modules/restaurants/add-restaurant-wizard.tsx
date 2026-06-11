@@ -71,8 +71,7 @@ const infoSchema = z.object({
   description_en: z.string().optional(),
   logo_url: z.string().optional(),
   cover_url: z.string().optional(),
-  delivery_fee: z.coerce.number().min(0),
-  min_order_amount: z.coerce.number().min(0),
+  commission_percentage: z.coerce.number().min(0).max(100),
   estimated_delivery_time: z.coerce.number().min(1),
   accepts_online_orders: z.boolean(),
 });
@@ -108,8 +107,7 @@ const infoDefaults: InfoForm = {
   description_en: "",
   logo_url: "",
   cover_url: "",
-  delivery_fee: 15,
-  min_order_amount: 0,
+  commission_percentage: 10,
   estimated_delivery_time: 30,
   accepts_online_orders: true,
 };
@@ -254,11 +252,8 @@ function StepInfo({
         <FormField label="Description (English)">
           <Textarea {...form.register("description_en")} dir="ltr" rows={3} placeholder="Authentic Egyptian street food…" />
         </FormField>
-        <FormField label="رسوم التوصيل (ج.م)" error={form.formState.errors.delivery_fee?.message}>
-          <Input {...form.register("delivery_fee")} type="number" step="0.5" min="0" />
-        </FormField>
-        <FormField label="أدنى طلب (ج.م)">
-          <Input {...form.register("min_order_amount")} type="number" step="0.5" min="0" />
+        <FormField label="نسبة عمولة المنصة (%)" error={form.formState.errors.commission_percentage?.message}>
+          <Input {...form.register("commission_percentage")} type="number" step="0.5" min="0" max="100" />
         </FormField>
         <FormField label="وقت التوصيل التقديري (دقيقة)">
           <Input {...form.register("estimated_delivery_time")} type="number" min="1" />
@@ -802,9 +797,8 @@ function StepReview({
               <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{info.description_ar}</p>
             ) : null}
             <div className="mt-2 flex flex-wrap gap-2">
-              <Badge variant="outline">{info.delivery_fee} ج.م توصيل</Badge>
+              <Badge variant="outline">عمولة {info.commission_percentage}%</Badge>
               <Badge variant="outline">{info.estimated_delivery_time} دقيقة</Badge>
-              <Badge variant="outline">أدنى {info.min_order_amount} ج.م</Badge>
               {info.accepts_online_orders ? <Badge>أونلاين</Badge> : null}
             </div>
           </div>
@@ -953,8 +947,7 @@ export function AddRestaurantWizard({ onSuccess, onCancel }: AddRestaurantWizard
         descriptionEn: infoData.description_en || undefined,
         logoUrl: infoData.logo_url || undefined,
         coverUrl: infoData.cover_url || undefined,
-        deliveryFee: infoData.delivery_fee,
-        minOrderAmount: infoData.min_order_amount,
+        commissionPercentage: infoData.commission_percentage,
         acceptsOnline: infoData.accepts_online_orders,
         categoryIds: selectedCategoryIds.length > 0 ? selectedCategoryIds : undefined,
       })) as { id?: string } | null;
@@ -1008,7 +1001,8 @@ export function AddRestaurantWizard({ onSuccess, onCancel }: AddRestaurantWizard
       // 4. Gallery photos
       for (const photo of galleryPhotos) {
         try {
-          const { error } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error } = await (supabase as any)
             .from("restaurant_gallery")
             .insert({
               restaurant_id: restaurantId,

@@ -145,7 +145,7 @@ begin
           'Content-Type',  'application/json',
           'Authorization', 'Bearer ' || v_supa_key
         ),
-        body    := jsonb_build_object('event', 'status_change', 'order_id', p_order_id)::text
+        body    := jsonb_build_object('event', 'status_change', 'order_id', p_order_id)
       );
     exception when others then null;
     end;
@@ -208,7 +208,7 @@ begin
         'Content-Type',  'application/json',
         'Authorization', 'Bearer ' || v_supa_key
       ),
-      body    := jsonb_build_object('event', 'new_order', 'order_id', new.id)::text
+      body    := jsonb_build_object('event', 'new_order', 'order_id', new.id)
     );
   exception when others then null;
   end;

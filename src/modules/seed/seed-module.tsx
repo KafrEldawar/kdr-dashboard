@@ -60,8 +60,7 @@ async function seedRestaurant(): Promise<string> {
     nameEn: "Nile Restaurant",
     descriptionAr: "مطعم تجريبي لاختبار النظام",
     descriptionEn: "Test restaurant for system testing",
-    deliveryFee: 15,
-    minOrderAmount: 50,
+    commissionPercentage: 10,
     acceptsOnline: true,
   });
   if (result?.error) throw new Error(result.error);
@@ -248,7 +247,7 @@ export function SeedModule() {
           لإنشاء مستخدم تجريبي
         </div>
         <p className="text-muted-foreground text-xs">
-          اذهب إلى <a href="/users" className="underline">صفحة المستخدمين</a> واستخدم نموذج "إنشاء مستخدم تجريبي".
+          اذهب إلى <a href="/users" className="underline">صفحة المستخدمين</a> واستخدم نموذج &quot;إنشاء مستخدم تجريبي&quot;.
           بعدها يمكنك ربط المستخدم بمطعم من صفحة المطاعم.
         </p>
       </div>

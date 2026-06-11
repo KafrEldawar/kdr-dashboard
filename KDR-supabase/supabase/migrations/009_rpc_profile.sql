@@ -22,8 +22,7 @@ begin
       'logo_url', r.logo_url, 'cover_url', r.cover_url,
       'is_accepting_orders', r.is_accepting_orders,
       'accepts_online_orders', r.accepts_online_orders,
-      'estimated_delivery_time', r.estimated_delivery_time,
-      'delivery_fee', r.delivery_fee, 'min_order_amount', r.min_order_amount
+      'estimated_delivery_time', r.estimated_delivery_time
     ) into v_rest
     from restaurant_owners ro join restaurants r on r.id = ro.restaurant_id
     where ro.user_id = v_uid;

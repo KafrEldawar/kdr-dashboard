@@ -18,14 +18,12 @@ import { restaurantsService } from "@/services/restaurants";
 import { useLocale } from "@/lib/i18n";
 import type { Restaurant } from "@/types/database";
 
-type EditState = { delivery_fee: string; min_order_amount: string };
-
-export function DeliveryFeesModule() {
+export function CommissionsModule() {
   const queryClient = useQueryClient();
   const locale = useLocale();
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editState, setEditState] = useState<EditState>({ delivery_fee: "", min_order_amount: "" });
+  const [editValue, setEditValue] = useState("");
   const debouncedSearch = useDebouncedValue(search);
 
   const query = useQuery({
@@ -34,13 +32,15 @@ export function DeliveryFeesModule() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, vals }: { id: string; vals: EditState }) =>
-      restaurantsService.update(id, {
-        delivery_fee: parseFloat(vals.delivery_fee) || 0,
-        min_order_amount: parseFloat(vals.min_order_amount) || 0,
-      }),
+    mutationFn: ({ id, value }: { id: string; value: string }) => {
+      const pct = parseFloat(value);
+      if (Number.isNaN(pct) || pct < 0 || pct > 100) {
+        throw new Error("النسبة لازم تكون بين 0 و 100");
+      }
+      return restaurantsService.update(id, { commission_percentage: pct });
+    },
     onSuccess: () => {
-      toast.success("تم تحديث رسوم التوصيل");
+      toast.success("تم تحديث نسبة العمولة");
       setEditingId(null);
       void queryClient.invalidateQueries({ queryKey: ["restaurants"] });
     },
@@ -56,8 +56,8 @@ export function DeliveryFeesModule() {
           locale === "ar" ? row.original.name_ar : row.original.name_en,
       },
       {
-        accessorKey: "delivery_fee",
-        header: "رسوم التوصيل (ج.م)",
+        accessorKey: "commission_percentage",
+        header: "نسبة عمولة المنصة (%)",
         cell: ({ row }) => {
           const r = row.original;
           if (editingId === r.id) {
@@ -65,34 +65,15 @@ export function DeliveryFeesModule() {
               <Input
                 type="number"
                 min={0}
+                max={100}
                 step={0.5}
                 className="w-24 h-8 text-sm"
-                value={editState.delivery_fee}
-                onChange={(e) => setEditState((s) => ({ ...s, delivery_fee: e.target.value }))}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
               />
             );
           }
-          return `${r.delivery_fee} ج.م`;
-        },
-      },
-      {
-        accessorKey: "min_order_amount",
-        header: "الحد الأدنى للطلب (ج.م)",
-        cell: ({ row }) => {
-          const r = row.original;
-          if (editingId === r.id) {
-            return (
-              <Input
-                type="number"
-                min={0}
-                step={0.5}
-                className="w-24 h-8 text-sm"
-                value={editState.min_order_amount}
-                onChange={(e) => setEditState((s) => ({ ...s, min_order_amount: e.target.value }))}
-              />
-            );
-          }
-          return `${r.min_order_amount} ج.م`;
+          return `${r.commission_percentage}%`;
         },
       },
       {
@@ -106,7 +87,7 @@ export function DeliveryFeesModule() {
                 <Button
                   size="sm"
                   disabled={updateMutation.isPending}
-                  onClick={() => updateMutation.mutate({ id: r.id, vals: editState })}
+                  onClick={() => updateMutation.mutate({ id: r.id, value: editValue })}
                 >
                   <Save className="h-4 w-4" />
                   حفظ
@@ -123,10 +104,7 @@ export function DeliveryFeesModule() {
               variant="outline"
               onClick={() => {
                 setEditingId(r.id);
-                setEditState({
-                  delivery_fee: String(r.delivery_fee),
-                  min_order_amount: String(r.min_order_amount),
-                });
+                setEditValue(String(r.commission_percentage));
               }}
             >
               <Edit className="h-4 w-4" />
@@ -136,14 +114,14 @@ export function DeliveryFeesModule() {
         },
       },
     ],
-    [locale, editingId, editState, updateMutation]
+    [locale, editingId, editValue, updateMutation]
   );
 
   return (
     <>
       <PageHeader
-        title="رسوم التوصيل"
-        description="تعديل رسوم التوصيل والحد الأدنى للطلب لكل مطعم."
+        title="عمولات المطاعم"
+        description="نسبة عمولة المنصة من كل طلب — تُحفظ نسخة منها داخل كل طلب وقت إنشائه."
       />
       <div className="mb-4">
         <SearchInput value={search} onChange={setSearch} placeholder="ابحث بالمطعم…" />

@@ -140,7 +140,7 @@ export function AnalyticsModule() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold">
-              {campaignsQuery.data?.meta.total ?? "…"}
+              {campaignsQuery.data?.meta?.total ?? "…"}
             </p>
             <p className="text-xs text-muted-foreground mt-1">حملة مرسلة</p>
           </CardContent>
@@ -207,7 +207,7 @@ export function AnalyticsModule() {
         {auditQuery.data ? (
           <DataTable
             columns={auditColumns}
-            data={auditQuery.data.data}
+            data={auditQuery.data.data ?? []}
             emptyTitle="لا يوجد أنشطة مسجلة"
           />
         ) : null}

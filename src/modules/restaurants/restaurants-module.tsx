@@ -8,7 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Edit, Eye, ToggleRight, Trash2, Plus, Star, MapPin,
-  Clock, Bike, ShoppingBag, Building2, Tag, ChevronRight, Images,
+  Clock, ShoppingBag, Building2, Tag, ChevronRight, Images,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -45,8 +45,7 @@ const schema = z.object({
   description_en: z.string().optional(),
   logo_url: z.string().optional(),
   cover_url: z.string().optional(),
-  delivery_fee: z.coerce.number().min(0).optional(),
-  min_order_amount: z.coerce.number().min(0).optional(),
+  commission_percentage: z.coerce.number().min(0).max(100).optional(),
   estimated_delivery_time: z.coerce.number().min(1).optional(),
   accepts_online_orders: z.boolean().default(true).optional(),
   category_ids: z.array(z.string()),
@@ -61,8 +60,7 @@ const defaultValues: RestaurantForm = {
   description_en: "",
   logo_url: "",
   cover_url: "",
-  delivery_fee: 15,
-  min_order_amount: 0,
+  commission_percentage: 10,
   estimated_delivery_time: 30,
   accepts_online_orders: true,
   category_ids: [],
@@ -165,7 +163,8 @@ function GalleryManager({ restaurantId }: { restaurantId: string }) {
     setAddingPhoto(true);
     try {
       const supabase = requireSupabase();
-      const { error } = await supabase.from("restaurant_gallery").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("restaurant_gallery").insert({
         restaurant_id: restaurantId,
         image_url: pendingUrl,
         description: pendingDesc || null,
@@ -314,11 +313,8 @@ function RestaurantFormFields({
         <FormField label="Description (English)">
           <Textarea {...form.register("description_en")} dir="ltr" rows={3} />
         </FormField>
-        <FormField label="رسوم التوصيل (ج.م)" error={form.formState.errors.delivery_fee?.message}>
-          <Input {...form.register("delivery_fee")} type="number" step="0.5" />
-        </FormField>
-        <FormField label="أدنى طلب (ج.م)">
-          <Input {...form.register("min_order_amount")} type="number" step="0.5" />
+        <FormField label="نسبة عمولة المنصة (%)" error={form.formState.errors.commission_percentage?.message}>
+          <Input {...form.register("commission_percentage")} type="number" step="0.5" min="0" max="100" />
         </FormField>
         <FormField label="وقت التوصيل (دقيقة)">
           <Input {...form.register("estimated_delivery_time")} type="number" />
@@ -439,13 +435,10 @@ function RestaurantDetailView({ restaurant }: { restaurant: Restaurant }) {
           {/* Chips */}
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 text-xs text-orange-700 dark:bg-orange-950/30">
-              <Bike className="h-3 w-3" />{restaurant.delivery_fee} ج.م
+              <ShoppingBag className="h-3 w-3" />عمولة {restaurant.commission_percentage}%
             </span>
             <span className="flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700 dark:bg-blue-950/30">
               <Clock className="h-3 w-3" />{restaurant.estimated_delivery_time} دقيقة
-            </span>
-            <span className="flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs text-green-700 dark:bg-green-950/30">
-              <ShoppingBag className="h-3 w-3" />أدنى {restaurant.min_order_amount} ج.م
             </span>
             {restaurant.accepts_online_orders ? (
               <span className="flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-1 text-xs text-purple-700 dark:bg-purple-950/30">
@@ -647,8 +640,7 @@ export function RestaurantsModule() {
         description_en: values.description_en || null,
         logo_url: values.logo_url || null,
         cover_url: values.cover_url || null,
-        delivery_fee: values.delivery_fee,
-        min_order_amount: values.min_order_amount,
+        commission_percentage: values.commission_percentage,
         estimated_delivery_time: values.estimated_delivery_time,
         accepts_online_orders: values.accepts_online_orders ?? true,
       });
@@ -700,9 +692,9 @@ export function RestaurantsModule() {
           locale === "ar" ? row.original.name_ar || "بدون اسم" : row.original.name_en || "No Name",
       },
       {
-        accessorKey: "delivery_fee",
-        header: "رسوم التوصيل",
-        cell: ({ row }) => `${row.original.delivery_fee} ج.م`,
+        accessorKey: "commission_percentage",
+        header: "العمولة",
+        cell: ({ row }) => `${row.original.commission_percentage}%`,
       },
       {
         accessorKey: "is_active",
@@ -740,8 +732,7 @@ export function RestaurantsModule() {
                     description_en: r.description_en || "",
                     logo_url: r.logo_url || "",
                     cover_url: r.cover_url || "",
-                    delivery_fee: r.delivery_fee,
-                    min_order_amount: r.min_order_amount,
+                    commission_percentage: r.commission_percentage,
                     estimated_delivery_time: r.estimated_delivery_time,
                     accepts_online_orders: r.accepts_online_orders,
                     category_ids: [],   // populated by restaurantCategoriesQuery

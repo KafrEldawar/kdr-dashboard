@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,26 +20,33 @@ import { formatDate } from "@/lib/format";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { adminService, type OrderHistoryRow } from "@/services/admin";
+import { financeService } from "@/services/finance";
 import { useLocale } from "@/lib/i18n";
 import type { Order, OrderStatus } from "@/types/database";
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   pending: "قيد الانتظار",
   preparing: "قيد التحضير",
+  ready_for_pickup: "جاهز للاستلام",
   out_for_delivery: "في الطريق",
   delivered: "تم التسليم",
+  picked_up_by_customer: "استلمه العميل",
+  rejected: "مرفوض",
   cancelled: "ملغي",
 };
 
 const STATUS_VARIANTS: Record<OrderStatus, "default" | "secondary" | "destructive" | "outline"> = {
   pending: "outline",
   preparing: "secondary",
+  ready_for_pickup: "secondary",
   out_for_delivery: "default",
   delivered: "default",
+  picked_up_by_customer: "default",
+  rejected: "destructive",
   cancelled: "destructive",
 };
 
-const ALL_STATUSES: OrderStatus[] = ["pending", "preparing", "out_for_delivery", "delivered", "cancelled"];
+const ALL_STATUSES: OrderStatus[] = ["pending", "preparing", "ready_for_pickup", "out_for_delivery", "delivered", "picked_up_by_customer", "rejected", "cancelled"];
 
 function OrderTimeline({ orderId }: { orderId: string }) {
   const { data, isLoading, isError, error } = useQuery({
@@ -98,6 +105,14 @@ export function OrderTrackingModule() {
         status: statusFilter !== "all" ? statusFilter : undefined,
         pageSize: 50,
       }),
+    retry: false,
+  });
+
+  // Delivery orders whose prep window elapsed with no driver claiming them
+  const unclaimedQuery = useQuery({
+    queryKey: ["orders-unclaimed"],
+    queryFn: () => financeService.getUnclaimedOrders(),
+    refetchInterval: 30_000,
     retry: false,
   });
 
@@ -193,6 +208,35 @@ export function OrderTrackingModule() {
         title="تتبع الطلبات"
         description="عرض مسار كل طلب — يُسجَّل كل تغيير في الحالة تلقائياً."
       />
+
+      {(unclaimedQuery.data?.length ?? 0) > 0 ? (
+        <Card className="mb-4 border-amber-400 bg-amber-50 dark:bg-amber-950/20">
+          <CardHeader className="py-3">
+            <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4" />
+              <span className="text-sm font-semibold">
+                {unclaimedQuery.data!.length} طلب توصيل بدون مندوب رغم انتهاء وقت التحضير
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0 pb-3 space-y-1">
+            {unclaimedQuery.data!.map((o) => (
+              <div
+                key={o.id}
+                className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
+              >
+                <span className="font-mono">{o.id.slice(0, 8)}…</span>
+                <span>{locale === "ar" ? o.restaurant.name_ar : o.restaurant.name_en}</span>
+                <span>{o.customer_name ?? "—"}</span>
+                <span>{o.total_amount} ج.م</span>
+                <span className="text-amber-700 dark:text-amber-400 font-medium">
+                  متأخر {o.overdue_minutes} دقيقة
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center">
         <SearchInput

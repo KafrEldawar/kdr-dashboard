@@ -65,9 +65,10 @@ async function handleCampaign(supabase: ReturnType<typeof createClient>, campaig
   const body  = campaign.body_ar;
 
   const { sent, failed } = await sendFcmBatch(
+    supabase,
     tokens.map((t: { token: string }) => t.token),
     title, body,
-    { image: campaign.image_url, data: campaign.extra_data }  // extra_data is the correct column
+    { image: campaign.image_url, data: campaign.extra_data }
   );
 
   // Store in-app notifications for all targeted users
@@ -102,26 +103,36 @@ async function handleOrderEvent(
   event: string,
   orderId: string
 ) {
-  const { data: order } = await supabase
+  console.log(`[send-push] event=${event} order_id=${orderId}`);
+
+  const { data: order, error: orderErr } = await supabase
     .from("orders")
-    .select("id, status, restaurant_id, user_id, total_amount")
+    .select("id, status, restaurant_id, user_id, total_amount, order_type, driver_id, estimated_preparation_minutes, rejection_reason")
     .eq("id", orderId)
     .single();
 
+  if (orderErr) console.error("[send-push] order fetch error:", orderErr.message);
   if (!order) return json({ error: "Order not found" }, 404);
 
+  console.log(`[send-push] order: restaurant_id=${order.restaurant_id} user_id=${order.user_id} status=${order.status}`);
+
   if (event === "new_order") {
-    const { data: owner } = await supabase
+    const { data: owner, error: ownerErr } = await supabase
       .from("restaurant_owners")
       .select("user_id")
       .eq("restaurant_id", order.restaurant_id)
       .single();
 
+    if (ownerErr) console.error("[send-push] owner fetch error:", ownerErr.message);
+    console.log(`[send-push] owner: ${owner ? "found=" + owner.user_id : "NOT FOUND"}`);
+
     if (owner) {
       const tokens = await getUserTokens(supabase, owner.user_id);
+      console.log(`[send-push] owner tokens: ${tokens.length}`);
       const title = "طلب جديد";
       const body = `لديك طلب جديد بقيمة ${order.total_amount}`;
-      await sendFcmBatch(tokens, title, body, { data: { order_id: orderId, event } });
+      const { sent, failed } = await sendFcmBatch(supabase, tokens, title, body, { data: { order_id: orderId, event } });
+      console.log(`[send-push] FCM new_order: sent=${sent} failed=${failed}`);
       await supabase.from("user_notifications").insert({
         user_id: owner.user_id, title, body,
         extra_data: { order_id: orderId, event },
@@ -129,20 +140,90 @@ async function handleOrderEvent(
     }
   } else if (event === "status_change") {
     const statusLabels: Record<string, string> = {
-      preparing:        "يتم تحضير طلبك",
-      out_for_delivery: "طلبك في الطريق إليك",
-      delivered:        "تم تسليم طلبك",
-      cancelled:        "تم إلغاء طلبك",
+      preparing:             "تم قبول طلبك وجاري تحضيره",
+      ready_for_pickup:      order.order_type === "pickup"
+                               ? "طلبك جاهز للاستلام من المطعم"
+                               : "طلبك جاهز وفي انتظار المندوب",
+      out_for_delivery:      "طلبك في الطريق إليك",
+      delivered:             "تم تسليم طلبك",
+      picked_up_by_customer: "تم استلام طلبك، بالهناء والشفاء",
+      rejected:              order.rejection_reason
+                               ? `عذراً، تم رفض طلبك: ${order.rejection_reason}`
+                               : "عذراً، تم رفض طلبك",
+      cancelled:             "تم إلغاء طلبك",
     };
     const label = statusLabels[order.status] ?? `حالة طلبك: ${order.status}`;
     const tokens = await getUserTokens(supabase, order.user_id);
-    await sendFcmBatch(tokens, "تحديث الطلب", label, {
-      data: { order_id: orderId, status: order.status },
+    console.log(`[send-push] customer tokens: ${tokens.length}`);
+    const { sent, failed } = await sendFcmBatch(supabase, tokens, "تحديث الطلب", label, {
+      data: { order_id: orderId, event, status: order.status },
     });
+    console.log(`[send-push] FCM status_change: sent=${sent} failed=${failed}`);
     await supabase.from("user_notifications").insert({
       user_id: order.user_id, title: "تحديث الطلب", body: label,
       extra_data: { order_id: orderId, status: order.status },
     });
+  } else if (event === "order_available") {
+    // New delivery order accepted by the restaurant → notify every driver
+    const driverTokens = await getTargetTokens(supabase, "custom", { role: "driver" });
+    console.log(`[send-push] driver tokens: ${driverTokens.length}`);
+    const title = "طلب توصيل جديد";
+    const body = `طلب جديد متاح للاستلام بقيمة ${order.total_amount}`;
+    const { sent, failed } = await sendFcmBatch(
+      supabase,
+      driverTokens.map((t) => t.token),
+      title, body,
+      { data: { order_id: orderId, event } }
+    );
+    console.log(`[send-push] FCM order_available: sent=${sent} failed=${failed}`);
+    const driverIds = [...new Set(driverTokens.map((t) => t.user_id))];
+    if (driverIds.length > 0) {
+      await supabase.from("user_notifications").insert(
+        driverIds.map((uid) => ({
+          user_id: uid, title, body,
+          extra_data: { order_id: orderId, event },
+        }))
+      );
+    }
+  } else if (event === "order_ready") {
+    // Order ready at the restaurant → notify the assigned driver
+    if (!order.driver_id) return json({ error: "Order has no assigned driver" }, 400);
+    const tokens = await getUserTokens(supabase, order.driver_id);
+    console.log(`[send-push] assigned driver tokens: ${tokens.length}`);
+    const title = "الطلب جاهز للاستلام";
+    const body = "الطلب جاهز، يمكنك استلامه من المطعم الآن";
+    const { sent, failed } = await sendFcmBatch(supabase, tokens, title, body, {
+      data: { order_id: orderId, event },
+    });
+    console.log(`[send-push] FCM order_ready: sent=${sent} failed=${failed}`);
+    await supabase.from("user_notifications").insert({
+      user_id: order.driver_id, title, body,
+      extra_data: { order_id: orderId, event },
+    });
+  } else if (event === "order_cancelled_driver") {
+    // Delivery order cancelled → notify the assigned driver, or all drivers if unclaimed
+    const title = "تم إلغاء الطلب";
+    const body = "تم إلغاء طلب التوصيل من المطعم";
+    if (order.driver_id) {
+      const tokens = await getUserTokens(supabase, order.driver_id);
+      const { sent, failed } = await sendFcmBatch(supabase, tokens, title, body, {
+        data: { order_id: orderId, event },
+      });
+      console.log(`[send-push] FCM order_cancelled_driver(assigned): sent=${sent} failed=${failed}`);
+      await supabase.from("user_notifications").insert({
+        user_id: order.driver_id, title, body,
+        extra_data: { order_id: orderId, event },
+      });
+    } else {
+      const driverTokens = await getTargetTokens(supabase, "custom", { role: "driver" });
+      const { sent, failed } = await sendFcmBatch(
+        supabase,
+        driverTokens.map((t) => t.token),
+        title, body,
+        { data: { order_id: orderId, event } }
+      );
+      console.log(`[send-push] FCM order_cancelled_driver(pool): sent=${sent} failed=${failed}`);
+    }
   }
 
   return json({ success: true });
@@ -188,6 +269,7 @@ async function getFcmAccessToken(): Promise<string> {
 }
 
 async function sendFcmBatch(
+  supabase: ReturnType<typeof createClient>,
   tokens: string[],
   title: string,
   body: string,
@@ -214,6 +296,14 @@ async function sendFcmBatch(
           message: {
             token,
             notification: { title, body, ...(opts.image ? { image: opts.image } : {}) },
+            android: {
+              priority: "high",
+              notification: { channel_id: "high_importance_channel", sound: "default" },
+            },
+            apns: {
+              headers: { "apns-priority": "10" },
+              payload: { aps: { sound: "default", badge: 1, "content-available": 1 } },
+            },
             data: opts.data
               ? Object.fromEntries(Object.entries(opts.data).map(([k, v]) => [k, String(v)]))
               : undefined,
@@ -224,7 +314,21 @@ async function sendFcmBatch(
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        if (res.ok) sent++; else failed++;
+        if (res.ok) {
+          sent++;
+        } else {
+          const errBody = await res.json().catch(() => ({}));
+          console.error(`[FCM] token=${token.slice(0, 20)}... status=${res.status} err=${JSON.stringify(errBody)}`);
+          // Auto-deactivate permanently invalid tokens so they are never retried
+          const fcmError = errBody?.error?.details?.find(
+            (d: { errorCode?: string }) => d.errorCode === "UNREGISTERED" || d.errorCode === "THIRD_PARTY_AUTH_ERROR"
+          );
+          if (fcmError) {
+            await supabase.from("device_tokens").update({ is_active: false }).eq("token", token);
+            console.log(`[FCM] deactivated stale token: ${token.slice(0, 20)}...`);
+          }
+          failed++;
+        }
       })
     );
   }

@@ -45,7 +45,14 @@ export type RpcListResult<T> = {
 function rpc(name: string, args?: Record<string, unknown>): Promise<{ data: any; error: any }> {
   const supabase = requireSupabase();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (supabase as any).rpc(name, args);
+  return (supabase as any).rpc(name, args).then((result: { data: any; error: any }) => {
+    // RPCs return {error: 'message'} as JSON data instead of a DB-level error.
+    // Normalise them so callers see a real thrown error.
+    if (!result.error && result.data?.error) {
+      return { data: null, error: new Error(result.data.error as string) };
+    }
+    return result;
+  });
 }
 
 export const adminService = {
@@ -136,8 +143,7 @@ export const adminService = {
     descriptionEn?: string;
     logoUrl?: string;
     coverUrl?: string;
-    deliveryFee?: number;
-    minOrderAmount?: number;
+    commissionPercentage?: number;
     acceptsOnline?: boolean;
     categoryIds?: string[];
   }) {
@@ -148,8 +154,7 @@ export const adminService = {
       p_description_en: params.descriptionEn ?? null,
       p_logo_url: params.logoUrl ?? null,
       p_cover_url: params.coverUrl ?? null,
-      p_delivery_fee: params.deliveryFee ?? 15,
-      p_min_order_amount: params.minOrderAmount ?? 0,
+      p_commission_percentage: params.commissionPercentage ?? 0,
       p_accepts_online: params.acceptsOnline ?? true,
       p_category_ids: params.categoryIds ?? null,
     });

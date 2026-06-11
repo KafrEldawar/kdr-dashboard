@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Edit, Eye, ShieldCheck, UserPlus } from "lucide-react";
+import { Edit, Eye, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { DataTable } from "@/components/shared/data-table";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
@@ -28,17 +38,19 @@ import { SearchInput } from "@/components/shared/search-input";
 import { formatDate } from "@/lib/format";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { usersService } from "@/services/users";
+import { adminService, type AdminUser } from "@/services/admin";
 import type { RestaurantOption } from "@/services/users";
+import { usersService } from "@/services/users";
 import { useTranslations, useLocale } from "@/lib/i18n";
-import type { Profile, UserRole } from "@/types/database";
+import type { UserRole } from "@/types/database";
+import { createUserAction, deleteUserAction } from "@/app/users/actions";
 
 const createUserSchema = z
   .object({
     full_name: z.string().min(2, "اكتب اسم واضح"),
     email: z.string().email("اكتب بريد صحيح"),
     phone: z.string().optional(),
-    role: z.enum(["customer", "restaurant", "admin"]),
+    role: z.enum(["customer", "restaurant", "driver", "admin"]),
     password: z.string().min(6, "كلمة المرور لازم تكون 6 حروف على الأقل"),
     restaurant_id: z.string().optional(),
   })
@@ -55,7 +67,7 @@ const createUserSchema = z
 const editUserSchema = z.object({
   full_name: z.string().min(2, "اكتب اسم واضح"),
   phone: z.string().optional(),
-  role: z.enum(["customer", "restaurant", "admin"]),
+  role: z.enum(["customer", "restaurant", "driver", "admin"]),
   is_active: z.boolean(),
   restaurant_id: z.string().optional(),
 });
@@ -73,6 +85,7 @@ const roleOptions: { value: UserRole | "all"; label: string }[] = [
   { value: "all", label: "الكل" },
   { value: "customer", label: "عميل" },
   { value: "restaurant", label: "مطعم" },
+  { value: "driver", label: "مندوب" },
   { value: "admin", label: "أدمن" },
 ];
 
@@ -83,16 +96,17 @@ export function UsersModule() {
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
-  const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
-  const [editingUser, setEditingUser] = useState<Profile | null>(null);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
   const usersQuery = useQuery({
     queryKey: ["users", debouncedSearch, roleFilter],
     queryFn: () =>
-      usersService.getAll({
-        search: debouncedSearch,
-        filters: roleFilter === "all" ? undefined : { role: roleFilter },
+      adminService.listUsers({
+        search: debouncedSearch || undefined,
+        role: roleFilter === "all" ? undefined : roleFilter,
         pageSize: 50,
       }),
   });
@@ -110,33 +124,54 @@ export function UsersModule() {
 
   const createForm = useForm<CreateUserForm>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: { full_name: "", email: "", phone: "", role: "customer", password: "Test123456", restaurant_id: "" },
+    defaultValues: {
+      full_name: "",
+      email: "",
+      phone: "",
+      role: "customer",
+      password: "Test123456",
+      restaurant_id: "",
+    },
   });
 
   const editForm = useForm<EditUserForm>({
     resolver: zodResolver(editUserSchema),
-    defaultValues: { full_name: "", phone: "", role: "customer", is_active: true, restaurant_id: "" },
+    defaultValues: {
+      full_name: "",
+      phone: "",
+      role: "customer",
+      is_active: true,
+      restaurant_id: "",
+    },
   });
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["users"] });
 
   const createMutation = useMutation({
     mutationFn: async (values: CreateUserForm) => {
-      const result = await usersService.createTestUser({
+      const result = await createUserAction({
         full_name: values.full_name,
         email: values.email,
         phone: values.phone,
         role: values.role,
         password: values.password,
       });
-      if (values.role === "restaurant" && values.restaurant_id) {
-        await usersService.linkOwnerToRestaurant(result.data.id, values.restaurant_id);
+      if (result.error) throw new Error(result.error);
+      if (values.role === "restaurant" && values.restaurant_id && result.userId) {
+        await usersService.linkOwnerToRestaurant(result.userId, values.restaurant_id);
       }
       return result;
     },
     onSuccess: () => {
       toast.success(t("users.createdSuccess"));
-      createForm.reset({ full_name: "", email: "", phone: "", role: "customer", password: "Test123456", restaurant_id: "" });
+      createForm.reset({
+        full_name: "",
+        email: "",
+        phone: "",
+        role: "customer",
+        password: "Test123456",
+        restaurant_id: "",
+      });
       void queryClient.invalidateQueries({ queryKey: ["restaurants-for-owner-select"] });
       refresh();
     },
@@ -144,23 +179,36 @@ export function UsersModule() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, values, previousRole }: { id: string; values: EditUserForm; previousRole: UserRole }) => {
+    mutationFn: async ({
+      id,
+      values,
+      previousRole,
+    }: {
+      id: string;
+      values: EditUserForm;
+      previousRole: UserRole;
+    }) => {
       if (values.role === "restaurant" && previousRole !== "restaurant") {
-        if (!values.restaurant_id) throw new Error("لازم تختار المطعم المرتبط بصاحب المطعم دا");
-        await usersService.update(id, {
-          full_name: values.full_name,
-          phone: values.phone || null,
-          is_active: values.is_active,
+        if (!values.restaurant_id)
+          throw new Error("لازم تختار المطعم المرتبط بصاحب المطعم دا");
+        await adminService.updateUser({
+          userId: id,
+          fullName: values.full_name,
+          phone: values.phone || undefined,
+          isActive: values.is_active,
         });
         await usersService.linkOwnerToRestaurant(id, values.restaurant_id);
-        void queryClient.invalidateQueries({ queryKey: ["restaurants-for-owner-select"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["restaurants-for-owner-select"],
+        });
         return;
       }
-      return usersService.update(id, {
-        full_name: values.full_name,
-        phone: values.phone || null,
+      return adminService.updateUser({
+        userId: id,
+        fullName: values.full_name,
+        phone: values.phone || undefined,
         role: values.role,
-        is_active: values.is_active,
+        isActive: values.is_active,
       });
     },
     onSuccess: () => {
@@ -172,7 +220,8 @@ export function UsersModule() {
   });
 
   const toggleActiveMutation = useMutation({
-    mutationFn: (user: Profile) => usersService.toggleActive(user),
+    mutationFn: (user: AdminUser) =>
+      adminService.updateUser({ userId: user.id, isActive: !user.is_active }),
     onSuccess: () => {
       toast.success("تم تحديث حالة المستخدم");
       refresh();
@@ -180,7 +229,25 @@ export function UsersModule() {
     onError: (error) => toast.error(toAppError(error).message),
   });
 
-  const columns = useMemo<ColumnDef<Profile>[]>(
+  const deleteMutation = useMutation({
+    mutationFn: async (user: AdminUser) => {
+      const result = await deleteUserAction(user.id);
+      if (result.error) throw new Error(result.error);
+    },
+    onSuccess: () => {
+      toast.success("تم حذف المستخدم نهائياً");
+      setUserToDelete(null);
+      if (selectedUser?.id === userToDelete?.id) setSelectedUser(null);
+      if (editingUser?.id === userToDelete?.id) setEditingUser(null);
+      refresh();
+    },
+    onError: (error) => {
+      toast.error(toAppError(error).message);
+      setUserToDelete(null);
+    },
+  });
+
+  const columns = useMemo<ColumnDef<AdminUser>[]>(
     () => [
       {
         accessorKey: "full_name",
@@ -197,7 +264,8 @@ export function UsersModule() {
         header: t("users.field.role"),
         cell: ({ row }) => (
           <Badge variant={roleBadgeVariant(row.original.role)}>
-            {roleOptions.find((o) => o.value === row.original.role)?.label ?? row.original.role}
+            {roleOptions.find((o) => o.value === row.original.role)?.label ??
+              row.original.role}
           </Badge>
         ),
       },
@@ -222,7 +290,11 @@ export function UsersModule() {
           const user = row.original;
           return (
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => setSelectedUser(user)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSelectedUser(user)}
+              >
                 <Eye className="h-4 w-4" />
                 {t("common.view")}
               </Button>
@@ -251,6 +323,14 @@ export function UsersModule() {
                 <ShieldCheck className="h-4 w-4" />
                 {user.is_active ? "حظر" : "تفعيل"}
               </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setUserToDelete(user)}
+              >
+                <Trash2 className="h-4 w-4" />
+                حذف
+              </Button>
             </div>
           );
         },
@@ -261,9 +341,13 @@ export function UsersModule() {
 
   return (
     <>
-      <PageHeader title={t("users.title")} description={t("users.description")} />
+      <PageHeader
+        title={t("users.title")}
+        description={t("users.description")}
+      />
 
       <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
+        {/* ── Create user form ─────────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -274,18 +358,40 @@ export function UsersModule() {
           <CardContent>
             <form
               className="space-y-4"
-              onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))}
+              onSubmit={createForm.handleSubmit((v) =>
+                createMutation.mutate(v)
+              )}
             >
-              <FormField label="الاسم الكامل" error={createForm.formState.errors.full_name?.message}>
-                <Input {...createForm.register("full_name")} placeholder="محمد أحمد" />
+              <FormField
+                label="الاسم الكامل"
+                error={createForm.formState.errors.full_name?.message}
+              >
+                <Input
+                  {...createForm.register("full_name")}
+                  placeholder="محمد أحمد"
+                />
               </FormField>
-              <FormField label="البريد الإلكتروني" error={createForm.formState.errors.email?.message}>
-                <Input {...createForm.register("email")} dir="ltr" placeholder="test@example.com" />
+              <FormField
+                label="البريد الإلكتروني"
+                error={createForm.formState.errors.email?.message}
+              >
+                <Input
+                  {...createForm.register("email")}
+                  dir="ltr"
+                  placeholder="test@example.com"
+                />
               </FormField>
               <FormField label="رقم الموبايل">
-                <Input {...createForm.register("phone")} dir="ltr" placeholder="01000000000" />
+                <Input
+                  {...createForm.register("phone")}
+                  dir="ltr"
+                  placeholder="01000000000"
+                />
               </FormField>
-              <FormField label="الدور" error={createForm.formState.errors.role?.message}>
+              <FormField
+                label="الدور"
+                error={createForm.formState.errors.role?.message}
+              >
                 <Select
                   value={createForm.watch("role")}
                   onValueChange={(v) => {
@@ -299,6 +405,7 @@ export function UsersModule() {
                   <SelectContent>
                     <SelectItem value="customer">عميل</SelectItem>
                     <SelectItem value="restaurant">مطعم</SelectItem>
+                    <SelectItem value="driver">مندوب</SelectItem>
                     <SelectItem value="admin">أدمن</SelectItem>
                   </SelectContent>
                 </Select>
@@ -306,43 +413,65 @@ export function UsersModule() {
               {createForm.watch("role") === "restaurant" ? (
                 <FormField
                   label="المطعم المرتبط"
-                  error={(createForm.formState.errors as Record<string, { message?: string }>).restaurant_id?.message}
+                  error={
+                    (
+                      createForm.formState.errors as Record<
+                        string,
+                        { message?: string }
+                      >
+                    ).restaurant_id?.message
+                  }
                 >
                   <Select
                     value={createForm.watch("restaurant_id") ?? ""}
-                    onValueChange={(v) => createForm.setValue("restaurant_id", v)}
+                    onValueChange={(v) =>
+                      createForm.setValue("restaurant_id", v)
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="اختار المطعم..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {(restaurantsQuery.data ?? []).map((r: RestaurantOption) => (
-                        <SelectItem
-                          key={r.id}
-                          value={r.id}
-                          disabled={r.ownerUserId !== null}
-                        >
-                          {r.name_ar}
-                          {r.ownerUserId !== null ? " (مرتبط بصاحب)" : ""}
-                        </SelectItem>
-                      ))}
+                      {(restaurantsQuery.data ?? []).map(
+                        (r: RestaurantOption) => (
+                          <SelectItem
+                            key={r.id}
+                            value={r.id}
+                            disabled={r.ownerUserId !== null}
+                          >
+                            {r.name_ar}
+                            {r.ownerUserId !== null ? " (مرتبط بصاحب)" : ""}
+                          </SelectItem>
+                        )
+                      )}
                     </SelectContent>
                   </Select>
                 </FormField>
               ) : null}
-              <FormField label="كلمة المرور" error={createForm.formState.errors.password?.message}>
-                <Input {...createForm.register("password")} dir="ltr" type="text" />
+              <FormField
+                label="كلمة المرور"
+                error={createForm.formState.errors.password?.message}
+              >
+                <Input
+                  {...createForm.register("password")}
+                  dir="ltr"
+                  type="text"
+                />
               </FormField>
               <Button className="w-full" disabled={createMutation.isPending}>
-                {createMutation.isPending ? t("common.creating") : t("users.createBtn")}
+                {createMutation.isPending
+                  ? t("common.creating")
+                  : t("users.createBtn")}
               </Button>
             </form>
             <p className="mt-3 text-xs text-muted-foreground">
-              البروفايل يُنشأ تلقائياً بعد التسجيل عبر trigger في قاعدة البيانات.
+              البروفايل يُنشأ تلقائياً بعد التسجيل عبر trigger في قاعدة
+              البيانات.
             </p>
           </CardContent>
         </Card>
 
+        {/* ── Users list ────────────────────────────────────────── */}
         <div className="space-y-4">
           <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center md:justify-between">
             <SearchInput
@@ -376,13 +505,14 @@ export function UsersModule() {
           {usersQuery.data ? (
             <DataTable
               columns={columns}
-              data={usersQuery.data.data}
+              data={usersQuery.data.data ?? []}
               emptyTitle={t("users.noUsers")}
             />
           ) : null}
         </div>
       </div>
 
+      {/* ── Edit user form ─────────────────────────────────────── */}
       {editingUser ? (
         <Card className="mt-6">
           <CardHeader>
@@ -392,16 +522,26 @@ export function UsersModule() {
             <form
               className="grid gap-4 md:grid-cols-2"
               onSubmit={editForm.handleSubmit((v) =>
-                updateMutation.mutate({ id: editingUser.id, values: v, previousRole: editingUser.role })
+                updateMutation.mutate({
+                  id: editingUser.id,
+                  values: v,
+                  previousRole: editingUser.role,
+                })
               )}
             >
-              <FormField label="الاسم الكامل" error={editForm.formState.errors.full_name?.message}>
+              <FormField
+                label="الاسم الكامل"
+                error={editForm.formState.errors.full_name?.message}
+              >
                 <Input {...editForm.register("full_name")} />
               </FormField>
               <FormField label="رقم الموبايل">
                 <Input {...editForm.register("phone")} dir="ltr" />
               </FormField>
-              <FormField label="الدور" error={editForm.formState.errors.role?.message}>
+              <FormField
+                label="الدور"
+                error={editForm.formState.errors.role?.message}
+              >
                 <Select
                   value={editForm.watch("role")}
                   onValueChange={(v) => {
@@ -416,37 +556,52 @@ export function UsersModule() {
                   <SelectContent>
                     <SelectItem value="customer">عميل</SelectItem>
                     <SelectItem value="restaurant">مطعم</SelectItem>
+                    <SelectItem value="driver">مندوب</SelectItem>
                     <SelectItem value="admin">أدمن</SelectItem>
                   </SelectContent>
                 </Select>
                 {editingUser?.role === "restaurant" ? (
-                  <p className="text-xs text-muted-foreground">الدور مرتبط بمطعم — غيّره من صفحة المطعم</p>
+                  <p className="text-xs text-muted-foreground">
+                    الدور مرتبط بمطعم — غيّره من صفحة المطعم
+                  </p>
                 ) : null}
               </FormField>
-              {editingUser?.role !== "restaurant" && editForm.watch("role") === "restaurant" ? (
+              {editingUser?.role !== "restaurant" &&
+              editForm.watch("role") === "restaurant" ? (
                 <div className="md:col-span-2">
                   <FormField
                     label="المطعم المرتبط"
-                    error={(editForm.formState.errors as Record<string, { message?: string }>).restaurant_id?.message}
+                    error={
+                      (
+                        editForm.formState.errors as Record<
+                          string,
+                          { message?: string }
+                        >
+                      ).restaurant_id?.message
+                    }
                   >
                     <Select
                       value={editForm.watch("restaurant_id") ?? ""}
-                      onValueChange={(v) => editForm.setValue("restaurant_id", v)}
+                      onValueChange={(v) =>
+                        editForm.setValue("restaurant_id", v)
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="اختار المطعم..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {(restaurantsQuery.data ?? []).map((r: RestaurantOption) => (
-                          <SelectItem
-                            key={r.id}
-                            value={r.id}
-                            disabled={r.ownerUserId !== null}
-                          >
-                            {r.name_ar}
-                            {r.ownerUserId !== null ? " (مرتبط بصاحب)" : ""}
-                          </SelectItem>
-                        ))}
+                        {(restaurantsQuery.data ?? []).map(
+                          (r: RestaurantOption) => (
+                            <SelectItem
+                              key={r.id}
+                              value={r.id}
+                              disabled={r.ownerUserId !== null}
+                            >
+                              {r.name_ar}
+                              {r.ownerUserId !== null ? " (مرتبط بصاحب)" : ""}
+                            </SelectItem>
+                          )
+                        )}
                       </SelectContent>
                     </Select>
                   </FormField>
@@ -455,7 +610,7 @@ export function UsersModule() {
               {editingUser?.role === "restaurant" ? (
                 <div className="md:col-span-2 rounded-md border bg-muted/30 p-3 text-sm">
                   <span className="font-semibold">المطعم المرتبط: </span>
-                  {restaurantsQuery.data?.find((r: RestaurantOption) => r.ownerUserId === editingUser.id)?.name_ar ?? "غير محدد"}
+                  {editingUser.restaurant?.name_ar ?? "غير محدد"}
                 </div>
               ) : null}
               <div className="flex items-center gap-2">
@@ -468,9 +623,15 @@ export function UsersModule() {
               </div>
               <div className="flex gap-3 md:col-span-2">
                 <Button disabled={updateMutation.isPending}>
-                  {updateMutation.isPending ? t("common.saving") : t("common.save")}
+                  {updateMutation.isPending
+                    ? t("common.saving")
+                    : t("common.save")}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditingUser(null)}
+                >
                   {t("common.cancel")}
                 </Button>
               </div>
@@ -479,46 +640,111 @@ export function UsersModule() {
         </Card>
       ) : null}
 
+      {/* ── User detail panel ─────────────────────────────────── */}
       {selectedUser ? (
         <Card className="mt-6">
           <CardHeader>
             <CardTitle className="text-base">
-              {t("users.relatedData")}: {selectedUser.full_name || selectedUser.id}
+              {t("users.relatedData")}:{" "}
+              {selectedUser.full_name || selectedUser.id}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="mb-4 space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
-              <p><span className="font-semibold">الاسم: </span>{selectedUser.full_name || "—"}</p>
-              <p><span className="font-semibold">الموبايل: </span>{selectedUser.phone || "—"}</p>
-              <p><span className="font-semibold">الدور: </span>{selectedUser.role}</p>
+              <p>
+                <span className="font-semibold">الاسم: </span>
+                {selectedUser.full_name || "—"}
+              </p>
+              <p>
+                <span className="font-semibold">الموبايل: </span>
+                {selectedUser.phone || "—"}
+              </p>
+              <p>
+                <span className="font-semibold">الدور: </span>
+                {selectedUser.role}
+              </p>
               {selectedUser.role === "restaurant" ? (
                 <p>
                   <span className="font-semibold">المطعم المرتبط: </span>
-                  {restaurantsQuery.data?.find((r: RestaurantOption) => r.ownerUserId === selectedUser.id)?.name_ar ?? "غير محدد"}
+                  {selectedUser.restaurant?.name_ar ?? "غير محدد"}
                 </p>
               ) : null}
-              <p><span className="font-semibold">الجنس: </span>{selectedUser.gender || "—"}</p>
-              <p><span className="font-semibold">نشط: </span>{selectedUser.is_active ? "✅" : "❌"}</p>
+              <p>
+                <span className="font-semibold">الجنس: </span>
+                {selectedUser.gender || "—"}
+              </p>
+              <p>
+                <span className="font-semibold">نشط: </span>
+                {selectedUser.is_active ? "✅" : "❌"}
+              </p>
             </div>
             <p className="mb-2 font-semibold text-sm">آخر 10 طلبات:</p>
             {relatedOrdersQuery.isLoading ? <LoadingState /> : null}
-            {relatedOrdersQuery.data && relatedOrdersQuery.data.length === 0 ? (
+            {relatedOrdersQuery.data &&
+            relatedOrdersQuery.data.length === 0 ? (
               <p className="text-sm text-muted-foreground">لا يوجد طلبات</p>
             ) : null}
-            {relatedOrdersQuery.data && relatedOrdersQuery.data.length > 0 ? (
+            {relatedOrdersQuery.data &&
+            relatedOrdersQuery.data.length > 0 ? (
               <div className="space-y-2">
-                {relatedOrdersQuery.data.map((order: {id: string; status: string; total_amount: number; created_at: string}) => (
-                  <div key={order.id} className="flex items-center justify-between rounded border p-2 text-sm">
-                    <span>{order.status}</span>
-                    <span>{order.total_amount} ج.م</span>
-                    <span className="text-muted-foreground">{formatDate(order.created_at, locale)}</span>
-                  </div>
-                ))}
+                {relatedOrdersQuery.data.map(
+                  (order: {
+                    id: string;
+                    status: string;
+                    total_amount: number;
+                    created_at: string;
+                  }) => (
+                    <div
+                      key={order.id}
+                      className="flex items-center justify-between rounded border p-2 text-sm"
+                    >
+                      <span>{order.status}</span>
+                      <span>{order.total_amount} ج.م</span>
+                      <span className="text-muted-foreground">
+                        {formatDate(order.created_at, locale)}
+                      </span>
+                    </div>
+                  )
+                )}
               </div>
             ) : null}
           </CardContent>
         </Card>
       ) : null}
+
+      {/* ── Delete confirmation dialog ────────────────────────── */}
+      <AlertDialog
+        open={Boolean(userToDelete)}
+        onOpenChange={(open: boolean) => { if (!open) setUserToDelete(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف المستخدم نهائياً</AlertDialogTitle>
+            <AlertDialogDescription>
+              هتحذف{" "}
+              <span className="font-semibold text-foreground">
+                {userToDelete?.full_name || userToDelete?.id}
+              </span>{" "}
+              نهائياً من قاعدة البيانات. العملية دي مش قابلة للرجوع — كل
+              البيانات المرتبطة (طلباته، جهازه، وبروفايله) هتتمسح.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              إلغاء
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (userToDelete) deleteMutation.mutate(userToDelete);
+              }}
+            >
+              {deleteMutation.isPending ? "جاري الحذف..." : "حذف نهائي"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -536,7 +762,9 @@ function FormField({
     <div className="space-y-2">
       <Label>{label}</Label>
       {children}
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : null}
     </div>
   );
 }

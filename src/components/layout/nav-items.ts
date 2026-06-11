@@ -18,6 +18,7 @@ import {
   Truck,
   Users,
   Utensils,
+  FilePenLine,
 } from "lucide-react";
 import type { MessageKey } from "@/lib/i18n/messages";
 
@@ -35,6 +36,7 @@ export const navItems: NavItem[] = [
   { titleKey: "nav.categories", href: "/categories", icon: Tags },
   { titleKey: "nav.menuCategories", href: "/menu-categories", icon: Boxes },
   { titleKey: "nav.menuItems", href: "/menu-items", icon: Utensils },
+  { titleKey: "nav.menuItemRequests", href: "/menu-item-requests", icon: FilePenLine },
   { titleKey: "nav.orders", href: "/orders", icon: ClipboardList },
   { titleKey: "nav.orderTracking", href: "/order-tracking", icon: Truck },
   { titleKey: "nav.offers", href: "/offers", icon: Gift },
@@ -42,7 +44,8 @@ export const navItems: NavItem[] = [
   { titleKey: "nav.reviews", href: "/reviews", icon: MessageSquare },
   { titleKey: "nav.favorites", href: "/favorites", icon: Heart },
   { titleKey: "nav.cart", href: "/cart", icon: ShoppingCart },
-  { titleKey: "nav.deliveryFees", href: "/delivery-fees", icon: CreditCard },
+  { titleKey: "nav.commissions", href: "/commissions", icon: CreditCard },
+  { titleKey: "nav.finance", href: "/finance", icon: BarChart3 },
   { titleKey: "nav.workingHours", href: "/working-hours", icon: Clock },
   { titleKey: "nav.analytics", href: "/analytics", icon: BarChart3 },
   { titleKey: "nav.queryLab", href: "/query-lab", icon: Database },

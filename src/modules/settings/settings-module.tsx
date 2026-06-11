@@ -82,6 +82,7 @@ export function SettingsModule() {
     setCheckingJwt(true);
     try {
       const supabase = requireSupabase();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase as any).rpc("rpc_admin_get_stats");
       setJwtOk(!data?.error);
     } catch {
