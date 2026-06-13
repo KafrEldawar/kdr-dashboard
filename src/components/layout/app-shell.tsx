@@ -15,7 +15,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <div className={cn("transition-[padding] duration-300", collapsed ? "lg:ps-20" : "lg:ps-72")}>
           <Header />
-          <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          <main className="w-full px-4 py-6 sm:px-12 lg:px-16">
             <div key="page" className="animate-in-up">{children}</div>
           </main>
         </div>
