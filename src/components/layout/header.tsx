@@ -9,6 +9,7 @@ import { LangSwitcher } from "@/components/layout/lang-switcher";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { SidebarNav } from "@/components/layout/sidebar";
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { DevEnvBanner, EnvSwitcher } from "@/components/layout/env-switcher";
 import { Button } from "@/components/ui/button";
 
 async function handleLogout() {
@@ -22,6 +23,7 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-md">
+      <DevEnvBanner />
       <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           {/* Mobile menu */}
@@ -81,6 +83,7 @@ export function Header() {
             <ShieldCheck className="h-3.5 w-3.5" />
             {t("layout.internal")}
           </span>
+          <EnvSwitcher />
           <ThemeToggle />
           <LangSwitcher />
           <Button size="icon" variant="ghost" onClick={handleLogout} title="تسجيل الخروج" className="text-muted-foreground hover:text-destructive">
