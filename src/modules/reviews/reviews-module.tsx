@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Star } from "lucide-react";
+import { MessageSquare, Star, Store } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -23,28 +23,40 @@ import { reviewsService } from "@/services/reviews";
 import { restaurantsService } from "@/services/restaurants";
 import { useLocale } from "@/lib/i18n";
 
+// Matches the rpc_admin_get_ratings response rows.
 type ReviewRow = {
-  id: string;
-  restaurant_id: string;
+  rating: number;
+  review: string | null;
   user_id: string;
-  restaurant_rating: number;
-  restaurant_review: string | null;
-  rated_at: string | null;
+  order_id: string;
+  user_name: string | null;
   created_at: string;
+  restaurant_id: string;
+  restaurant_name: string | null;
 };
 
-function StarRating({ rating }: { rating: number }) {
+function StarRating({ rating, showValue = true }: { rating: number; showValue?: boolean }) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-0.5">
       {Array.from({ length: 5 }).map((_, i) => (
         <Star
           key={i}
-          className={`h-3 w-3 ${i < rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`}
+          className={`h-3.5 w-3.5 ${
+            i < rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"
+          }`}
         />
       ))}
-      <span className="text-xs text-muted-foreground ms-1">{rating}/5</span>
+      {showValue ? (
+        <span className="ms-1.5 text-xs font-semibold text-muted-foreground">{rating}/5</span>
+      ) : null}
     </div>
   );
+}
+
+function initials(name: string | null) {
+  if (!name) return "؟";
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
 export function ReviewsModule() {
@@ -60,7 +72,7 @@ export function ReviewsModule() {
   });
 
   const reviewsQuery = useQuery({
-    queryKey: ["reviews", restaurantFilter, ratingFilter, debouncedSearch],
+    queryKey: ["reviews", restaurantFilter, ratingFilter],
     queryFn: () =>
       reviewsService.getAll({
         filters: {
@@ -75,54 +87,98 @@ export function ReviewsModule() {
   const columns = useMemo<ColumnDef<ReviewRow>[]>(
     () => [
       {
-        accessorKey: "restaurant_id",
+        accessorKey: "restaurant_name",
         header: "المطعم",
-        cell: ({ row }) => {
-          const r = restaurants.find((x) => x.id === row.original.restaurant_id);
-          return r ? (locale === "ar" ? r.name_ar : r.name_en) : row.original.restaurant_id.slice(0, 8);
-        },
-      },
-      {
-        accessorKey: "restaurant_rating",
-        header: "التقييم",
-        cell: ({ row }) => <StarRating rating={row.original.restaurant_rating} />,
-      },
-      {
-        accessorKey: "restaurant_review",
-        header: "التعليق",
         cell: ({ row }) => (
-          <span className="max-w-[250px] truncate block text-sm">
-            {row.original.restaurant_review || "—"}
-          </span>
+          <div className="flex items-center gap-2 font-medium text-foreground">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Store className="h-3.5 w-3.5" />
+            </span>
+            {row.original.restaurant_name?.trim() || row.original.restaurant_id.slice(0, 8)}
+          </div>
         ),
       },
       {
-        accessorKey: "rated_at",
-        header: "التاريخ",
+        accessorKey: "user_name",
+        header: "العميل",
+        cell: ({ row }) => (
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-bold text-muted-foreground">
+              {initials(row.original.user_name)}
+            </span>
+            <span className="text-sm">{row.original.user_name?.trim() || "—"}</span>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "rating",
+        header: "التقييم",
+        cell: ({ row }) => <StarRating rating={row.original.rating} />,
+      },
+      {
+        accessorKey: "review",
+        header: "التعليق",
         cell: ({ row }) =>
-          row.original.rated_at ? formatDate(row.original.rated_at, locale) : "—",
+          row.original.review?.trim() ? (
+            <span className="block max-w-[280px] truncate text-sm">{row.original.review}</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">بدون تعليق</span>
+          ),
+      },
+      {
+        accessorKey: "created_at",
+        header: "التاريخ",
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap text-sm text-muted-foreground">
+            {formatDate(row.original.created_at, locale)}
+          </span>
+        ),
       },
     ],
-    [locale, restaurants]
+    [locale]
   );
 
   const data = (reviewsQuery.data?.data ?? []) as ReviewRow[];
+  const total = reviewsQuery.data?.count ?? data.length;
   const filtered = debouncedSearch
-    ? data.filter((r) =>
-        r.restaurant_review?.toLowerCase().includes(debouncedSearch.toLowerCase())
-      )
+    ? data.filter((r) => r.review?.toLowerCase().includes(debouncedSearch.toLowerCase()))
     : data;
+  const average = data.length
+    ? data.reduce((sum, r) => sum + (r.rating ?? 0), 0) / data.length
+    : 0;
+  const withComment = data.filter((r) => r.review?.trim()).length;
 
   return (
     <>
-      <PageHeader title="التقييمات" description="تقييمات العملاء للمطاعم (من جدول orders)." />
+      <PageHeader
+        icon={MessageSquare}
+        title="التقييمات"
+        description="تقييمات العملاء للمطاعم وتعليقاتهم."
+      />
 
-      <div className="mb-4 flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="ابحث في التعليقات…"
-        />
+      {/* Summary */}
+      {reviewsQuery.data ? (
+        <div className="mb-5 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-border bg-card p-4 card-elevated">
+            <p className="text-sm font-medium text-muted-foreground">متوسط التقييم</p>
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="text-2xl font-extrabold tabular-nums">{average.toFixed(1)}</span>
+              <StarRating rating={Math.round(average)} showValue={false} />
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 card-elevated">
+            <p className="text-sm font-medium text-muted-foreground">إجمالي التقييمات</p>
+            <p className="mt-1.5 text-2xl font-extrabold tabular-nums">{total}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 card-elevated">
+            <p className="text-sm font-medium text-muted-foreground">تقييمات بتعليق</p>
+            <p className="mt-1.5 text-2xl font-extrabold tabular-nums">{withComment}</p>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mb-4 flex flex-col gap-3 rounded-xl border border-border bg-card p-4 md:flex-row md:items-center">
+        <SearchInput value={search} onChange={setSearch} placeholder="ابحث في التعليقات…" />
         <div className="w-full md:w-52">
           <Select value={restaurantFilter} onValueChange={setRestaurantFilter}>
             <SelectTrigger>

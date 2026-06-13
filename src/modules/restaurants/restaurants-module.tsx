@@ -9,7 +9,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Edit, Eye, ToggleRight, Trash2, Plus, Star, MapPin,
-  Clock, ShoppingBag, Building2, Tag, ChevronRight, Images,
+  Clock, ShoppingBag, Building2, Tag, Images,
+  Gift, MessageSquare, ExternalLink, Utensils, X, CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -348,29 +349,69 @@ function RestaurantFormFields({
   );
 }
 
+function DetailSection({
+  title,
+  icon: Icon,
+  count,
+  children,
+}: {
+  title: string;
+  icon: typeof Star;
+  count?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5 card-elevated">
+      <h3 className="mb-4 flex items-center gap-2 text-base font-bold">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="h-4 w-4" />
+        </span>
+        {title}
+        {typeof count === "number" ? (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+            {count}
+          </span>
+        ) : null}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function StarsRow({ rating, size = 14 }: { rating: number; size?: number }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Star
+          key={i}
+          style={{ width: size, height: size }}
+          className={i < rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}
+        />
+      ))}
+    </div>
+  );
+}
+
 function RestaurantDetailView({ restaurant }: { restaurant: Restaurant }) {
   const locale = useLocale();
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   const branchesQuery = useQuery({
     queryKey: ["restaurant-branches", restaurant.id],
-    queryFn: () => branchesService.filters({ restaurant_id: restaurant.id }, { pageSize: 20 }),
+    queryFn: () => branchesService.filters({ restaurant_id: restaurant.id }, { pageSize: 50 }),
   });
-
   const menuQuery = useQuery({
     queryKey: ["restaurant-menu", restaurant.id],
-    queryFn: () => menuItemsService.filters({ restaurant_id: restaurant.id }, { pageSize: 100 }),
+    queryFn: () => menuItemsService.filters({ restaurant_id: restaurant.id }, { pageSize: 200 }),
   });
-
   const offersQuery = useQuery({
     queryKey: ["restaurant-offers", restaurant.id],
-    queryFn: () => offersService.filters({ restaurant_id: restaurant.id }, { pageSize: 20 }),
+    queryFn: () => offersService.filters({ restaurant_id: restaurant.id }, { pageSize: 50 }),
   });
-
   const ratingsQuery = useQuery({
     queryKey: ["restaurant-ratings", restaurant.id],
-    queryFn: () => adminService.getRatings({ restaurantId: restaurant.id, pageSize: 5 }),
+    queryFn: () => adminService.getRatings({ restaurantId: restaurant.id, pageSize: 50 }),
   });
-
   const galleryQuery = useQuery({
     queryKey: ["restaurant-gallery", restaurant.id],
     queryFn: async () => {
@@ -385,206 +426,294 @@ function RestaurantDetailView({ restaurant }: { restaurant: Restaurant }) {
     },
   });
 
-  const name = locale === "ar" ? restaurant.name_ar : restaurant.name_en;
+  const name = (locale === "ar" ? restaurant.name_ar : restaurant.name_en) || restaurant.name_ar;
   const description = locale === "ar" ? restaurant.description_ar : restaurant.description_en;
   const branches: Branch[] = branchesQuery.data?.data ?? [];
   const menuItems: MenuItem[] = menuQuery.data?.data ?? [];
   const offers: Offer[] = offersQuery.data?.data ?? [];
   const gallery: RestaurantGallery[] = galleryQuery.data ?? [];
-  const ratings = (ratingsQuery.data ?? []) as {
-    id: string;
-    rating: number;
-    comment?: string;
-    reviewer?: { full_name?: string };
-  }[];
+  const ratings = ratingsQuery.data?.data ?? [];
+  const ratingsCount = ratingsQuery.data?.meta?.total ?? ratings.length;
+  const avgRating = ratings.length
+    ? ratings.reduce((s, r) => s + (r.rating ?? 0), 0) / ratings.length
+    : 0;
 
   return (
-    <div className="mx-auto max-w-sm">
-      <div className="overflow-hidden rounded-3xl border-4 border-foreground/20 bg-white shadow-2xl dark:bg-zinc-900">
-        {/* Cover */}
-        <div className="relative h-44 bg-gradient-to-br from-orange-200 to-amber-300">
+    <div className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
+      {/* Hero */}
+      <div className="overflow-hidden rounded-2xl border border-border bg-card card-elevated">
+        <div className="relative h-44 bg-muted sm:h-56">
           {restaurant.cover_url ? (
-            <img src={restaurant.cover_url} alt="cover" className="h-full w-full object-cover" />
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={restaurant.cover_url} alt="" className="h-full w-full object-cover" />
           ) : (
-            <div className="flex h-full items-center justify-center text-5xl opacity-30">🍽️</div>
+            <div className="dot-grid flex h-full items-center justify-center text-muted-foreground">
+              <Building2 className="h-10 w-10 opacity-40" />
+            </div>
           )}
-          {/* Logo */}
-          <div className="absolute -bottom-8 right-4 h-16 w-16 overflow-hidden rounded-2xl border-4 border-white bg-white shadow-lg dark:border-zinc-900">
-            {restaurant.logo_url ? (
-              <img src={restaurant.logo_url} alt="logo" className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex h-full items-center justify-center text-2xl">🏪</div>
-            )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
+          <div className="absolute bottom-4 end-5 flex items-end gap-3">
+            <span className="h-20 w-20 overflow-hidden rounded-2xl border-4 border-card bg-card shadow-lg">
+              {restaurant.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={restaurant.logo_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center bg-primary/10 text-primary">
+                  <Building2 className="h-8 w-8" />
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="absolute start-5 top-4">
+            <Badge variant={restaurant.is_active ? "success" : "secondary"}>
+              {restaurant.is_active ? "مفعّل" : "متوقف"}
+            </Badge>
           </div>
         </div>
 
-        {/* Info */}
-        <div className="px-4 pb-4 pt-10">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-foreground">{name}</h2>
+        <div className="p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-2xl font-extrabold tracking-tight">{name}</h2>
               {description ? (
-                <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{description}</p>
+                <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p>
               ) : null}
             </div>
-            <Badge variant={restaurant.is_active ? "default" : "secondary"} className="mt-1 shrink-0">
-              {restaurant.is_active ? "مفتوح" : "مغلق"}
-            </Badge>
+            <div className="flex items-center gap-1.5 rounded-xl bg-muted/60 px-3 py-2">
+              <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+              <span className="text-lg font-extrabold tabular-nums">{avgRating.toFixed(1)}</span>
+              <span className="text-xs text-muted-foreground">({ratingsCount})</span>
+            </div>
           </div>
 
           {/* Chips */}
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-1 text-xs text-orange-700 dark:bg-orange-950/30">
-              <ShoppingBag className="h-3 w-3" />عمولة {restaurant.commission_percentage}%
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+              <ShoppingBag className="h-3.5 w-3.5" /> عمولة {restaurant.commission_percentage}%
             </span>
-            <span className="flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700 dark:bg-blue-950/30">
-              <Clock className="h-3 w-3" />{restaurant.estimated_delivery_time} دقيقة
+            <span className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--chart-4)/0.12)] px-3 py-1.5 text-xs font-semibold text-[hsl(var(--chart-4))]">
+              <Clock className="h-3.5 w-3.5" /> {restaurant.estimated_delivery_time} دقيقة
             </span>
-            {restaurant.accepts_online_orders ? (
-              <span className="flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-1 text-xs text-purple-700 dark:bg-purple-950/30">
-                ✓ أونلاين
-              </span>
-            ) : null}
+            <span
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                restaurant.accepts_online_orders
+                  ? "bg-success/12 text-success"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {restaurant.accepts_online_orders ? "يقبل الطلبات أونلاين" : "أونلاين متوقف"}
+            </span>
           </div>
 
-          {/* Active Offers */}
-          {offers.filter((o) => o.is_active).length > 0 ? (
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">العروض</p>
-              <div className="space-y-1.5">
-                {offers.filter((o) => o.is_active).map((offer) => (
-                  <div key={offer.id} className="flex items-center gap-2 rounded-xl bg-orange-50 p-2.5 dark:bg-orange-950/20">
-                    {offer.image_url ? (
-                      <img src={offer.image_url} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
-                    ) : (
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-200 text-xl">🏷️</div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-semibold">
-                        {locale === "ar" ? offer.title_ar : (offer.title_en ?? offer.title_ar)}
-                      </p>
-                      <p className="text-xs text-orange-700">خصم {offer.discount_percentage}%</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          {/* Stat strip */}
+          <div className="mt-4 grid grid-cols-4 gap-3 rounded-xl bg-muted/40 p-3 text-center">
+            <Stat label="فرع" value={branches.length} icon={Building2} />
+            <Stat label="صنف" value={menuItems.length} icon={Utensils} />
+            <Stat label="صورة" value={gallery.length} icon={Images} />
+            <Stat label="تقييم" value={ratingsCount} icon={Star} />
+          </div>
+        </div>
+      </div>
 
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Main column */}
+        <div className="space-y-6 lg:col-span-2">
           {/* Menu */}
-          {menuItems.length > 0 ? (
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">قائمة الطعام</p>
-              <div className="space-y-1.5">
-                {menuItems.slice(0, 6).map((item) => (
-                  <div key={item.id} className="flex items-center gap-3 rounded-xl border bg-background p-2.5">
+          <DetailSection title="قائمة الطعام" icon={Utensils} count={menuItems.length}>
+            {menuItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground">لا توجد أصناف.</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {menuItems.map((item) => (
+                  <div key={item.id} className="flex items-center gap-3 rounded-xl border border-border p-2.5">
                     {item.image_url ? (
-                      <img src={item.image_url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.image_url} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
                     ) : (
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted text-xl">🍴</div>
+                      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                        <Utensils className="h-5 w-5" />
+                      </span>
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {locale === "ar" ? item.name_ar : (item.name_en ?? item.name_ar)}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold">
+                          {locale === "ar" ? item.name_ar : item.name_en ?? item.name_ar}
+                        </p>
+                        {!item.is_available ? (
+                          <Badge variant="secondary" className="shrink-0">غير متاح</Badge>
+                        ) : null}
+                      </div>
                       {item.description_ar ? (
                         <p className="truncate text-xs text-muted-foreground">{item.description_ar}</p>
                       ) : null}
-                      <p className="text-xs font-semibold text-orange-600">{item.price} ج.م</p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </div>
-                ))}
-                {menuItems.length > 6 ? (
-                  <p className="py-1 text-center text-xs text-muted-foreground">
-                    + {menuItems.length - 6} عنصر آخر
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {/* Branches */}
-          {branches.length > 0 ? (
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">الفروع</p>
-              <div className="space-y-1.5">
-                {branches.map((branch) => (
-                  <div key={branch.id} className="flex items-start gap-2 rounded-xl border p-2.5">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <div>
-                      <p className="text-xs font-medium">
-                        {locale === "ar"
-                          ? (branch.name_ar ?? branch.address_ar)
-                          : (branch.name_en ?? branch.address_en)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {locale === "ar" ? branch.address_ar : branch.address_en}
-                      </p>
+                      <p className="mt-0.5 text-sm font-bold text-primary">{item.price} ج.م</p>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
-          ) : null}
+            )}
+          </DetailSection>
 
-          {/* Ratings */}
-          {ratings.length > 0 ? (
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">التقييمات</p>
-              <div className="space-y-1.5">
+          {/* Reviews */}
+          <DetailSection title="التقييمات" icon={MessageSquare} count={ratingsCount}>
+            {ratings.length === 0 ? (
+              <p className="text-sm text-muted-foreground">لا توجد تقييمات بعد.</p>
+            ) : (
+              <div className="space-y-2.5">
                 {ratings.map((r) => (
-                  <div key={r.id} className="rounded-xl border p-2.5">
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-3 w-3 ${i < r.rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
-                        />
-                      ))}
-                      <span className="mr-1 text-xs text-muted-foreground">
-                        {r.reviewer?.full_name ?? "مستخدم"}
-                      </span>
-                    </div>
-                    {r.comment ? <p className="mt-1 text-xs text-muted-foreground">{r.comment}</p> : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {/* Gallery */}
-          {gallery.length > 0 ? (
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">معرض الصور</p>
-              <div className="grid grid-cols-3 gap-1.5">
-                {gallery.map((g) => (
-                  <div key={g.id} className="group relative overflow-hidden rounded-xl">
-                    <img
-                      src={g.image_url}
-                      alt={g.description ?? ""}
-                      className="h-20 w-full object-cover"
-                    />
-                    {g.description ? (
-                      <div className="absolute inset-x-0 bottom-0 bg-black/50 p-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <p className="truncate text-center text-[10px] text-white">{g.description}</p>
+                  <div key={r.order_id} className="rounded-xl border border-border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <StarsRow rating={r.rating} />
+                        <span className="text-sm font-semibold">{r.user_name?.trim() || "مستخدم"}</span>
                       </div>
+                      <span className="text-xs text-muted-foreground">{formatDate(r.created_at, locale)}</span>
+                    </div>
+                    {r.review?.trim() ? (
+                      <p className="mt-1.5 text-sm text-muted-foreground">{r.review}</p>
                     ) : null}
                   </div>
                 ))}
               </div>
-            </div>
-          ) : null}
+            )}
+          </DetailSection>
+        </div>
 
-          {/* Stats */}
-          <div className="mt-4 flex items-center justify-between rounded-xl bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5" />{branches.length} فرع</span>
-            <span className="flex items-center gap-1"><Tag className="h-3.5 w-3.5" />{menuItems.length} صنف</span>
-            <span className="flex items-center gap-1"><Images className="h-3.5 w-3.5" />{gallery.length} صورة</span>
-            <span className="flex items-center gap-1"><Star className="h-3.5 w-3.5" />{ratings.length} تقييم</span>
-          </div>
+        {/* Side column */}
+        <div className="space-y-6">
+          {/* Offers */}
+          <DetailSection title="العروض" icon={Gift} count={offers.length}>
+            {offers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">لا توجد عروض.</p>
+            ) : (
+              <div className="space-y-2">
+                {offers.map((offer) => (
+                  <div key={offer.id} className="flex items-center gap-2.5 rounded-xl border border-border p-2.5">
+                    {offer.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={offer.image_url} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover" />
+                    ) : (
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Gift className="h-5 w-5" />
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">
+                        {locale === "ar" ? offer.title_ar : offer.title_en ?? offer.title_ar}
+                      </p>
+                      <p className="text-xs text-muted-foreground">خصم {offer.discount_percentage}%</p>
+                    </div>
+                    <Badge variant={offer.is_active ? "success" : "secondary"} className="shrink-0">
+                      {offer.is_active ? "فعّال" : "منتهي"}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DetailSection>
+
+          {/* Branches */}
+          <DetailSection title="الفروع" icon={MapPin} count={branches.length}>
+            {branches.length === 0 ? (
+              <p className="text-sm text-muted-foreground">لا توجد فروع.</p>
+            ) : (
+              <div className="space-y-2">
+                {branches.map((branch) => (
+                  <div key={branch.id} className="rounded-xl border border-border p-3">
+                    <p className="text-sm font-semibold">
+                      {locale === "ar"
+                        ? branch.name_ar ?? branch.address_ar
+                        : branch.name_en ?? branch.address_en}
+                    </p>
+                    <p className="mt-0.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                      {locale === "ar" ? branch.address_ar : branch.address_en}
+                    </p>
+                    {branch.location_url ? (
+                      <a
+                        href={branch.location_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" /> فتح على الخريطة
+                      </a>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </DetailSection>
         </div>
       </div>
+
+      {/* Gallery (full width, with lightbox) */}
+      <DetailSection title="معرض الصور" icon={Images} count={gallery.length}>
+        {gallery.length === 0 ? (
+          <p className="text-sm text-muted-foreground">لا توجد صور.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+            {gallery.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => setLightbox(g.image_url)}
+                className="group relative aspect-square overflow-hidden rounded-xl border border-border focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={g.image_url}
+                  alt={g.description ?? ""}
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+                <span className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
+                {g.description ? (
+                  <span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-2 py-1 text-center text-[11px] text-white">
+                    {g.description}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        )}
+      </DetailSection>
+
+      {/* Lightbox overlay */}
+      {lightbox ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4 animate-fade"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            type="button"
+            aria-label="إغلاق"
+            className="absolute end-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+            onClick={() => setLightbox(null)}
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox}
+            alt=""
+            className="max-h-[90vh] max-w-[95vw] rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Stat({ label, value, icon: Icon }: { label: string; value: number; icon: typeof Star }) {
+  return (
+    <div>
+      <div className="flex items-center justify-center gap-1 text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" />
+      </div>
+      <p className="mt-1 text-lg font-extrabold tabular-nums">{value}</p>
+      <p className="text-[11px] text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -810,11 +939,11 @@ export function RestaurantsModule() {
         />
       </FullScreenDialog>
 
-      {/* Mobile Preview Dialog */}
+      {/* Full restaurant detail */}
       <FullScreenDialog
         open={Boolean(viewingRestaurant)}
         onOpenChange={(open) => !open && setViewingRestaurant(null)}
-        title="معاينة تطبيق الموبايل"
+        title="تفاصيل المطعم"
         description={
           viewingRestaurant
             ? (locale === "ar" ? viewingRestaurant.name_ar : viewingRestaurant.name_en)
@@ -822,9 +951,7 @@ export function RestaurantsModule() {
         }
       >
         {viewingRestaurant ? (
-          <div className="flex items-start justify-center p-6">
-            <RestaurantDetailView restaurant={viewingRestaurant} />
-          </div>
+          <RestaurantDetailView restaurant={viewingRestaurant} />
         ) : null}
       </FullScreenDialog>
 

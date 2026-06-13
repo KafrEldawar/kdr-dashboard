@@ -4,9 +4,10 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
+import { ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Modal } from "@/components/shared/modal";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -37,16 +38,62 @@ const statusLabels: Record<OrderStatus, string> = {
   cancelled: "ملغي",
 };
 
-const statusVariants: Record<OrderStatus, "default" | "secondary" | "destructive" | "outline"> = {
-  pending: "outline",
-  preparing: "secondary",
-  ready_for_pickup: "secondary",
-  out_for_delivery: "default",
-  delivered: "default",
-  picked_up_by_customer: "default",
-  rejected: "destructive",
-  cancelled: "destructive",
+// Semantic per-status styling (pill background/text + status dot).
+const statusStyle: Record<OrderStatus, { pill: string; dot: string }> = {
+  pending: {
+    pill: "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/25",
+    dot: "bg-amber-500",
+  },
+  preparing: {
+    pill: "bg-blue-50 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:ring-blue-500/25",
+    dot: "bg-blue-500",
+  },
+  ready_for_pickup: {
+    pill: "bg-teal-50 text-teal-700 ring-1 ring-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:ring-teal-500/25",
+    dot: "bg-teal-500",
+  },
+  out_for_delivery: {
+    pill: "bg-violet-50 text-violet-700 ring-1 ring-violet-200 dark:bg-violet-500/10 dark:text-violet-400 dark:ring-violet-500/25",
+    dot: "bg-violet-500",
+  },
+  delivered: {
+    pill: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/25",
+    dot: "bg-emerald-500",
+  },
+  picked_up_by_customer: {
+    pill: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/25",
+    dot: "bg-emerald-500",
+  },
+  rejected: {
+    pill: "bg-red-50 text-red-700 ring-1 ring-red-200 dark:bg-red-500/10 dark:text-red-400 dark:ring-red-500/25",
+    dot: "bg-red-500",
+  },
+  cancelled: {
+    pill: "bg-zinc-100 text-zinc-600 ring-1 ring-zinc-200 dark:bg-zinc-500/15 dark:text-zinc-400 dark:ring-zinc-500/25",
+    dot: "bg-zinc-400",
+  },
 };
+
+function OrderStatusBadge({
+  status,
+  size = "sm",
+}: {
+  status: OrderStatus;
+  size?: "sm" | "lg";
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full font-semibold",
+        size === "lg" ? "px-3 py-1.5 text-sm" : "px-2.5 py-1 text-xs",
+        statusStyle[status].pill
+      )}
+    >
+      <span className={cn("rounded-full", size === "lg" ? "h-2 w-2" : "h-1.5 w-1.5", statusStyle[status].dot)} />
+      {statusLabels[status]}
+    </span>
+  );
+}
 
 const ALL_STATUSES: OrderStatus[] = ["pending", "preparing", "ready_for_pickup", "out_for_delivery", "delivered", "picked_up_by_customer", "rejected", "cancelled"];
 
@@ -94,11 +141,7 @@ export function OrdersModule() {
       {
         accessorKey: "status",
         header: "الحالة",
-        cell: ({ row }) => (
-          <Badge variant={statusVariants[row.original.status]}>
-            {statusLabels[row.original.status]}
-          </Badge>
-        ),
+        cell: ({ row }) => <OrderStatusBadge status={row.original.status} />,
       },
       {
         accessorKey: "total_amount",
@@ -137,7 +180,7 @@ export function OrdersModule() {
 
   return (
     <>
-      <PageHeader title="الطلبات" description="تصفح الطلبات وتحديث حالاتها." />
+      <PageHeader icon={ClipboardList} title="الطلبات" description="تصفح الطلبات وتحديث حالاتها." />
 
       <div className="mb-4 flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center md:justify-between">
         <SearchInput value={search} onChange={setSearch} placeholder="ابحث بالحالة أو العنوان أو الموبايل…" />
@@ -169,59 +212,78 @@ export function OrdersModule() {
         <DataTable columns={columns} data={ordersQuery.data.data} emptyTitle="لا يوجد طلبات" />
       ) : null}
 
-      {selectedOrder ? (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="text-base">
-              تحديث حالة الطلب — {selectedOrder.id.slice(0, 8)}…
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground">الحالة الحالية</p>
-                <Badge variant={statusVariants[selectedOrder.status]}>
-                  {statusLabels[selectedOrder.status]}
-                </Badge>
+      <Modal
+        open={Boolean(selectedOrder)}
+        onOpenChange={(open) => !open && setSelectedOrder(null)}
+        title="تحديث حالة الطلب"
+        description={selectedOrder ? `#${selectedOrder.id.slice(0, 8)}` : ""}
+        size="md"
+      >
+        {selectedOrder ? (
+          <div className="space-y-5">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 p-3.5">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">الحالة الحالية</span>
+                <OrderStatusBadge status={selectedOrder.status} size="lg" />
               </div>
-              <div>
-                <p className="text-muted-foreground">الإجمالي</p>
-                <p>{selectedOrder.total_amount} ج.م</p>
+              <div className="text-end">
+                <span className="text-xs text-muted-foreground">الإجمالي</span>
+                <p className="text-base font-extrabold tabular-nums">{selectedOrder.total_amount} ج.م</p>
               </div>
-              <div>
-                <p className="text-muted-foreground">العنوان</p>
-                <p>{selectedOrder.delivery_address}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">الموبايل</p>
-                <p>{selectedOrder.contact_phone}</p>
-              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <OrderField label="العنوان" value={selectedOrder.delivery_address || "—"} />
+              <OrderField label="الموبايل" value={selectedOrder.contact_phone || "—"} dir="ltr" />
               {selectedOrder.notes ? (
                 <div className="col-span-2">
-                  <p className="text-muted-foreground">ملاحظات</p>
-                  <p>{selectedOrder.notes}</p>
+                  <OrderField label="ملاحظات" value={selectedOrder.notes} />
                 </div>
               ) : null}
             </div>
-            <div className="flex flex-wrap gap-2">
-              {ALL_STATUSES.filter((s) => s !== selectedOrder.status).map((s) => (
-                <Button
-                  key={s}
-                  size="sm"
-                  variant="outline"
-                  disabled={updateStatusMutation.isPending}
-                  onClick={() => updateStatusMutation.mutate({ id: selectedOrder.id, status: s })}
-                >
-                  → {statusLabels[s]}
-                </Button>
-              ))}
-              <Button size="sm" variant="ghost" onClick={() => setSelectedOrder(null)}>
-                إلغاء
-              </Button>
+
+            <div>
+              <p className="mb-2 text-sm font-bold">تغيير الحالة إلى</p>
+              <div className="grid grid-cols-2 gap-2">
+                {ALL_STATUSES.filter((s) => s !== selectedOrder.status).map((s) => (
+                  <Button
+                    key={s}
+                    size="sm"
+                    variant="outline"
+                    className="justify-start"
+                    disabled={updateStatusMutation.isPending}
+                    onClick={() =>
+                      updateStatusMutation.mutate({ id: selectedOrder.id, status: s })
+                    }
+                  >
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full", statusStyle[s].dot)} />
+                    {statusLabels[s]}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      ) : null}
+          </div>
+        ) : null}
+      </Modal>
     </>
+  );
+}
+
+function OrderField({
+  label,
+  value,
+  dir,
+}: {
+  label: string;
+  value: string;
+  dir?: "ltr" | "rtl";
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-2.5">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-0.5 break-words text-sm font-medium" dir={dir}>
+        {value}
+      </p>
+    </div>
   );
 }
