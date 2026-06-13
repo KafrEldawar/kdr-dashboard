@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { Toaster } from "sonner";
 import { LangSync } from "@/components/layout/lang-sync";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { AuthProvider } from "./auth-provider";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
@@ -21,11 +22,13 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <LangSync />
-        {children}
-        <Toaster richColors position="top-right" />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <LangSync />
+          {children}
+          <Toaster richColors position="top-right" closeButton theme="system" />
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

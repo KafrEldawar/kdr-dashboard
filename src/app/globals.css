@@ -2,33 +2,204 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  KDR — Kafr Al-Dawar Restaurants
+  Brand identity derived from the logo: vivid vermillion #F02000 (hsl 8 100% 47%)
+  on warm neutral surfaces, with Cairo as the primary typeface.
+*/
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 30 33% 99%;
+    --foreground: 12 28% 12%;
+
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 173 80% 25%;
-    --primary-foreground: 180 100% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 24 95% 53%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 173 80% 25%;
-    --radius: 0.5rem;
+    --card-foreground: 12 28% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 12 28% 12%;
+
+    /* Brand red — slightly deepened from the logo for AA text contrast on white */
+    --primary: 8 90% 46%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Exact logo color for marks / brand surfaces */
+    --brand: 8 100% 47%;
+    --brand-foreground: 0 0% 100%;
+
+    --secondary: 20 20% 96%;
+    --secondary-foreground: 12 25% 18%;
+
+    --muted: 20 16% 95.5%;
+    --muted-foreground: 15 12% 42%;
+
+    --accent: 14 100% 96%;
+    --accent-foreground: 8 90% 42%;
+
+    --destructive: 0 78% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 62% 38%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 95% 48%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 20 20% 90%;
+    --input: 20 20% 90%;
+    --ring: 8 90% 46%;
+
+    --chart-1: 8 88% 50%;
+    --chart-2: 28 95% 53%;
+    --chart-3: 142 55% 42%;
+    --chart-4: 199 85% 46%;
+    --chart-5: 268 60% 58%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 14 18% 8%;
+    --foreground: 30 25% 95%;
+
+    --card: 14 16% 11%;
+    --card-foreground: 30 25% 95%;
+
+    --popover: 14 16% 11%;
+    --popover-foreground: 30 25% 95%;
+
+    --primary: 8 95% 57%;
+    --primary-foreground: 0 0% 100%;
+
+    --brand: 8 100% 54%;
+    --brand-foreground: 0 0% 100%;
+
+    --secondary: 14 12% 18%;
+    --secondary-foreground: 30 20% 92%;
+
+    --muted: 14 12% 16%;
+    --muted-foreground: 24 10% 64%;
+
+    --accent: 8 55% 20%;
+    --accent-foreground: 8 95% 72%;
+
+    --destructive: 0 72% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 55% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 95% 55%;
+    --warning-foreground: 14 18% 8%;
+
+    --border: 14 12% 20%;
+    --input: 14 12% 22%;
+    --ring: 8 95% 57%;
+
+    --chart-1: 8 92% 60%;
+    --chart-2: 28 95% 60%;
+    --chart-3: 142 55% 52%;
+    --chart-4: 199 85% 58%;
+    --chart-5: 268 70% 68%;
   }
 
   * {
     @apply border-border;
   }
 
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
+    font-feature-settings: "ss01", "cv01", "kern";
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight;
+  }
+
+  ::selection {
+    background-color: hsl(var(--brand) / 0.22);
+    color: hsl(var(--foreground));
+  }
+
+  /* Refined scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  /* Brand gradient used for logo backdrops and hero surfaces */
+  .brand-gradient {
+    background-image: linear-gradient(135deg, hsl(8 100% 52%) 0%, hsl(8 100% 47%) 45%, hsl(14 92% 42%) 100%);
+  }
+
+  .brand-text-gradient {
+    background-image: linear-gradient(120deg, hsl(8 100% 50%), hsl(20 95% 48%));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Soft card elevation that adapts to theme */
+  .card-elevated {
+    box-shadow:
+      0 1px 2px -1px hsl(12 28% 12% / 0.08),
+      0 4px 16px -8px hsl(12 28% 12% / 0.12);
+  }
+  .dark .card-elevated {
+    box-shadow:
+      0 1px 2px -1px hsl(0 0% 0% / 0.4),
+      0 8px 24px -12px hsl(0 0% 0% / 0.6);
+  }
+
+  /* Subtle dotted texture for empty / hero areas */
+  .dot-grid {
+    background-image: radial-gradient(hsl(var(--muted-foreground) / 0.18) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+}
+
+@layer utilities {
+  .animate-in-up {
+    animation: kdr-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes kdr-in-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade {
+    animation: kdr-fade 0.3s ease both;
+  }
+  @keyframes kdr-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .animate-scale-in {
+    animation: kdr-scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes kdr-scale-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
   }
 }

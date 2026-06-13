@@ -25,7 +25,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { SearchInput } from "@/components/shared/search-input";
-import { FullScreenDialog } from "@/components/shared/full-screen-dialog";
+import { Modal } from "@/components/shared/modal";
 import { formatDate } from "@/lib/format";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -96,7 +96,7 @@ function VoucherFormFields({
   locale: string;
 }) {
   return (
-    <form className="mx-auto max-w-2xl p-6" onSubmit={form.handleSubmit(onSubmit)}>
+    <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
       <div className="grid gap-4 md:grid-cols-2">
         <FormField label="المطعم" error={form.formState.errors.restaurant_id?.message}>
           <Select
@@ -348,7 +348,7 @@ export function PromoCodesModule() {
       ) : null}
 
       {/* Add Dialog */}
-      <FullScreenDialog
+      <Modal size="lg"
         open={addOpen}
         onOpenChange={setAddOpen}
         title="إضافة كود خصم جديد"
@@ -363,10 +363,10 @@ export function PromoCodesModule() {
           onCancel={() => setAddOpen(false)}
           locale={locale}
         />
-      </FullScreenDialog>
+      </Modal>
 
       {/* Edit Dialog */}
-      <FullScreenDialog
+      <Modal size="lg"
         open={Boolean(editingVoucher)}
         onOpenChange={(open) => !open && setEditingVoucher(null)}
         title="تعديل كود الخصم"
@@ -383,7 +383,7 @@ export function PromoCodesModule() {
           onCancel={() => setEditingVoucher(null)}
           locale={locale}
         />
-      </FullScreenDialog>
+      </Modal>
 
       {deletingVoucher ? (
         <ConfirmDialog

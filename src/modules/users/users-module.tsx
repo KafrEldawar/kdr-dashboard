@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -10,7 +10,6 @@ import { Edit, Eye, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -35,6 +34,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { SearchInput } from "@/components/shared/search-input";
+import { Modal } from "@/components/shared/modal";
 import { formatDate } from "@/lib/format";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -76,7 +76,7 @@ type CreateUserForm = z.infer<typeof createUserSchema>;
 type EditUserForm = z.infer<typeof editUserSchema>;
 
 function roleBadgeVariant(role: string) {
-  if (role === "admin") return "default" as const;
+  if (role === "admin") return "solid" as const;
   if (role === "restaurant") return "secondary" as const;
   return "outline" as const;
 }
@@ -96,6 +96,7 @@ export function UsersModule() {
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [addOpen, setAddOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
@@ -122,16 +123,18 @@ export function UsersModule() {
     queryFn: () => usersService.getRestaurantsForOwnerSelect(),
   });
 
+  const createDefaults: CreateUserForm = {
+    full_name: "",
+    email: "",
+    phone: "",
+    role: "customer",
+    password: "Test123456",
+    restaurant_id: "",
+  };
+
   const createForm = useForm<CreateUserForm>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: {
-      full_name: "",
-      email: "",
-      phone: "",
-      role: "customer",
-      password: "Test123456",
-      restaurant_id: "",
-    },
+    defaultValues: createDefaults,
   });
 
   const editForm = useForm<EditUserForm>({
@@ -144,6 +147,16 @@ export function UsersModule() {
       restaurant_id: "",
     },
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("new") === "1") {
+      createForm.reset(createDefaults);
+      setAddOpen(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["users"] });
 
@@ -164,14 +177,8 @@ export function UsersModule() {
     },
     onSuccess: () => {
       toast.success(t("users.createdSuccess"));
-      createForm.reset({
-        full_name: "",
-        email: "",
-        phone: "",
-        role: "customer",
-        password: "Test123456",
-        restaurant_id: "",
-      });
+      createForm.reset(createDefaults);
+      setAddOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["restaurants-for-owner-select"] });
       refresh();
     },
@@ -252,12 +259,14 @@ export function UsersModule() {
       {
         accessorKey: "full_name",
         header: t("users.field.name"),
-        cell: ({ row }) => row.original.full_name || "—",
+        cell: ({ row }) => (
+          <span className="font-medium text-foreground">{row.original.full_name || "—"}</span>
+        ),
       },
       {
         accessorKey: "phone",
         header: t("users.field.phone"),
-        cell: ({ row }) => row.original.phone || "—",
+        cell: ({ row }) => <span dir="ltr">{row.original.phone || "—"}</span>,
       },
       {
         accessorKey: "role",
@@ -273,7 +282,7 @@ export function UsersModule() {
         accessorKey: "is_active",
         header: "الحالة",
         cell: ({ row }) => (
-          <Badge variant={row.original.is_active ? "default" : "destructive"}>
+          <Badge variant={row.original.is_active ? "success" : "secondary"}>
             {row.original.is_active ? "نشط" : "محظور"}
           </Badge>
         ),
@@ -290,11 +299,7 @@ export function UsersModule() {
           const user = row.original;
           return (
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setSelectedUser(user)}
-              >
+              <Button size="sm" variant="outline" onClick={() => setSelectedUser(user)}>
                 <Eye className="h-4 w-4" />
                 {t("common.view")}
               </Button>
@@ -323,11 +328,7 @@ export function UsersModule() {
                 <ShieldCheck className="h-4 w-4" />
                 {user.is_active ? "حظر" : "تفعيل"}
               </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setUserToDelete(user)}
-              >
+              <Button size="sm" variant="destructive" onClick={() => setUserToDelete(user)}>
                 <Trash2 className="h-4 w-4" />
                 حذف
               </Button>
@@ -342,380 +343,318 @@ export function UsersModule() {
   return (
     <>
       <PageHeader
+        icon={UserPlus}
         title={t("users.title")}
         description={t("users.description")}
+        action={
+          <Button
+            onClick={() => {
+              createForm.reset(createDefaults);
+              setAddOpen(true);
+            }}
+          >
+            <UserPlus className="h-4 w-4" />
+            {t("users.createBtn")}
+          </Button>
+        }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
-        {/* ── Create user form ─────────────────────────────────── */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <UserPlus className="h-4 w-4" />
-              {t("users.createTestUser")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form
-              className="space-y-4"
-              onSubmit={createForm.handleSubmit((v) =>
-                createMutation.mutate(v)
-              )}
-            >
-              <FormField
-                label="الاسم الكامل"
-                error={createForm.formState.errors.full_name?.message}
-              >
-                <Input
-                  {...createForm.register("full_name")}
-                  placeholder="محمد أحمد"
-                />
-              </FormField>
-              <FormField
-                label="البريد الإلكتروني"
-                error={createForm.formState.errors.email?.message}
-              >
-                <Input
-                  {...createForm.register("email")}
-                  dir="ltr"
-                  placeholder="test@example.com"
-                />
-              </FormField>
-              <FormField label="رقم الموبايل">
-                <Input
-                  {...createForm.register("phone")}
-                  dir="ltr"
-                  placeholder="01000000000"
-                />
-              </FormField>
-              <FormField
-                label="الدور"
-                error={createForm.formState.errors.role?.message}
-              >
-                <Select
-                  value={createForm.watch("role")}
-                  onValueChange={(v) => {
-                    createForm.setValue("role", v as UserRole);
-                    createForm.setValue("restaurant_id", "");
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="customer">عميل</SelectItem>
-                    <SelectItem value="restaurant">مطعم</SelectItem>
-                    <SelectItem value="driver">مندوب</SelectItem>
-                    <SelectItem value="admin">أدمن</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormField>
-              {createForm.watch("role") === "restaurant" ? (
-                <FormField
-                  label="المطعم المرتبط"
-                  error={
-                    (
-                      createForm.formState.errors as Record<
-                        string,
-                        { message?: string }
-                      >
-                    ).restaurant_id?.message
-                  }
-                >
-                  <Select
-                    value={createForm.watch("restaurant_id") ?? ""}
-                    onValueChange={(v) =>
-                      createForm.setValue("restaurant_id", v)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="اختار المطعم..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(restaurantsQuery.data ?? []).map(
-                        (r: RestaurantOption) => (
-                          <SelectItem
-                            key={r.id}
-                            value={r.id}
-                            disabled={r.ownerUserId !== null}
-                          >
-                            {r.name_ar}
-                            {r.ownerUserId !== null ? " (مرتبط بصاحب)" : ""}
-                          </SelectItem>
-                        )
-                      )}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-              ) : null}
-              <FormField
-                label="كلمة المرور"
-                error={createForm.formState.errors.password?.message}
-              >
-                <Input
-                  {...createForm.register("password")}
-                  dir="ltr"
-                  type="text"
-                />
-              </FormField>
-              <Button className="w-full" disabled={createMutation.isPending}>
-                {createMutation.isPending
-                  ? t("common.creating")
-                  : t("users.createBtn")}
-              </Button>
-            </form>
-            <p className="mt-3 text-xs text-muted-foreground">
-              البروفايل يُنشأ تلقائياً بعد التسجيل عبر trigger في قاعدة
-              البيانات.
-            </p>
-          </CardContent>
-        </Card>
+      {/* Filters */}
+      <div className="mb-4 flex flex-col gap-3 rounded-xl border border-border bg-card p-4 md:flex-row md:items-center md:justify-between">
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder={t("users.searchPlaceholder")}
+        />
+        <div className="w-full md:w-48">
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {roleOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
-        {/* ── Users list ────────────────────────────────────────── */}
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 md:flex-row md:items-center md:justify-between">
-            <SearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder={t("users.searchPlaceholder")}
-            />
-            <div className="w-full md:w-48">
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
+      {/* List */}
+      {usersQuery.isLoading ? <LoadingState /> : null}
+      {usersQuery.isError ? (
+        <ErrorState
+          description={toAppError(usersQuery.error).message}
+          onRetry={() => usersQuery.refetch()}
+        />
+      ) : null}
+      {usersQuery.data ? (
+        <DataTable
+          columns={columns}
+          data={usersQuery.data.data ?? []}
+          emptyTitle={t("users.noUsers")}
+        />
+      ) : null}
+
+      {/* ── Create user (modal) ─────────────────────────────────── */}
+      <Modal
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        title={t("users.createTestUser")}
+        description={t("users.createTestUserNote")}
+        size="md"
+      >
+        <form
+          className="space-y-4"
+          onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))}
+        >
+          <FormField label="الاسم الكامل" error={createForm.formState.errors.full_name?.message}>
+            <Input {...createForm.register("full_name")} placeholder="محمد أحمد" />
+          </FormField>
+          <FormField label="البريد الإلكتروني" error={createForm.formState.errors.email?.message}>
+            <Input {...createForm.register("email")} dir="ltr" placeholder="test@example.com" />
+          </FormField>
+          <FormField label="رقم الموبايل">
+            <Input {...createForm.register("phone")} dir="ltr" placeholder="01000000000" />
+          </FormField>
+          <FormField label="الدور" error={createForm.formState.errors.role?.message}>
+            <Select
+              value={createForm.watch("role")}
+              onValueChange={(v) => {
+                createForm.setValue("role", v as UserRole);
+                createForm.setValue("restaurant_id", "");
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="customer">عميل</SelectItem>
+                <SelectItem value="restaurant">مطعم</SelectItem>
+                <SelectItem value="driver">مندوب</SelectItem>
+                <SelectItem value="admin">أدمن</SelectItem>
+              </SelectContent>
+            </Select>
+          </FormField>
+          {createForm.watch("role") === "restaurant" ? (
+            <FormField
+              label="المطعم المرتبط"
+              error={
+                (createForm.formState.errors as Record<string, { message?: string }>)
+                  .restaurant_id?.message
+              }
+            >
+              <Select
+                value={createForm.watch("restaurant_id") ?? ""}
+                onValueChange={(v) => createForm.setValue("restaurant_id", v)}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="اختار المطعم..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {roleOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
+                  {(restaurantsQuery.data ?? []).map((r: RestaurantOption) => (
+                    <SelectItem key={r.id} value={r.id} disabled={r.ownerUserId !== null}>
+                      {r.name_ar}
+                      {r.ownerUserId !== null ? " (مرتبط بصاحب)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </FormField>
+          ) : null}
+          <FormField label="كلمة المرور" error={createForm.formState.errors.password?.message}>
+            <Input {...createForm.register("password")} dir="ltr" type="text" />
+          </FormField>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button disabled={createMutation.isPending}>
+              {createMutation.isPending ? t("common.creating") : t("users.createBtn")}
+            </Button>
           </div>
+        </form>
+      </Modal>
 
-          {usersQuery.isLoading ? <LoadingState /> : null}
-          {usersQuery.isError ? (
-            <ErrorState
-              description={toAppError(usersQuery.error).message}
-              onRetry={() => usersQuery.refetch()}
-            />
-          ) : null}
-          {usersQuery.data ? (
-            <DataTable
-              columns={columns}
-              data={usersQuery.data.data ?? []}
-              emptyTitle={t("users.noUsers")}
-            />
-          ) : null}
-        </div>
-      </div>
-
-      {/* ── Edit user form ─────────────────────────────────────── */}
-      {editingUser ? (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="text-base">{t("users.editUser")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form
-              className="grid gap-4 md:grid-cols-2"
-              onSubmit={editForm.handleSubmit((v) =>
-                updateMutation.mutate({
-                  id: editingUser.id,
-                  values: v,
-                  previousRole: editingUser.role,
-                })
-              )}
-            >
-              <FormField
-                label="الاسم الكامل"
-                error={editForm.formState.errors.full_name?.message}
+      {/* ── Edit user (modal) ───────────────────────────────────── */}
+      <Modal
+        open={Boolean(editingUser)}
+        onOpenChange={(open) => !open && setEditingUser(null)}
+        title={t("users.editUser")}
+        description={editingUser?.full_name ?? ""}
+        size="md"
+      >
+        {editingUser ? (
+          <form
+            className="space-y-4"
+            onSubmit={editForm.handleSubmit((v) =>
+              updateMutation.mutate({
+                id: editingUser.id,
+                values: v,
+                previousRole: editingUser.role,
+              })
+            )}
+          >
+            <FormField label="الاسم الكامل" error={editForm.formState.errors.full_name?.message}>
+              <Input {...editForm.register("full_name")} />
+            </FormField>
+            <FormField label="رقم الموبايل">
+              <Input {...editForm.register("phone")} dir="ltr" />
+            </FormField>
+            <FormField label="الدور" error={editForm.formState.errors.role?.message}>
+              <Select
+                value={editForm.watch("role")}
+                onValueChange={(v) => {
+                  editForm.setValue("role", v as UserRole);
+                  editForm.setValue("restaurant_id", "");
+                }}
+                disabled={editingUser?.role === "restaurant"}
               >
-                <Input {...editForm.register("full_name")} />
-              </FormField>
-              <FormField label="رقم الموبايل">
-                <Input {...editForm.register("phone")} dir="ltr" />
-              </FormField>
-              <FormField
-                label="الدور"
-                error={editForm.formState.errors.role?.message}
-              >
-                <Select
-                  value={editForm.watch("role")}
-                  onValueChange={(v) => {
-                    editForm.setValue("role", v as UserRole);
-                    editForm.setValue("restaurant_id", "");
-                  }}
-                  disabled={editingUser?.role === "restaurant"}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="customer">عميل</SelectItem>
-                    <SelectItem value="restaurant">مطعم</SelectItem>
-                    <SelectItem value="driver">مندوب</SelectItem>
-                    <SelectItem value="admin">أدمن</SelectItem>
-                  </SelectContent>
-                </Select>
-                {editingUser?.role === "restaurant" ? (
-                  <p className="text-xs text-muted-foreground">
-                    الدور مرتبط بمطعم — غيّره من صفحة المطعم
-                  </p>
-                ) : null}
-              </FormField>
-              {editingUser?.role !== "restaurant" &&
-              editForm.watch("role") === "restaurant" ? (
-                <div className="md:col-span-2">
-                  <FormField
-                    label="المطعم المرتبط"
-                    error={
-                      (
-                        editForm.formState.errors as Record<
-                          string,
-                          { message?: string }
-                        >
-                      ).restaurant_id?.message
-                    }
-                  >
-                    <Select
-                      value={editForm.watch("restaurant_id") ?? ""}
-                      onValueChange={(v) =>
-                        editForm.setValue("restaurant_id", v)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="اختار المطعم..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(restaurantsQuery.data ?? []).map(
-                          (r: RestaurantOption) => (
-                            <SelectItem
-                              key={r.id}
-                              value={r.id}
-                              disabled={r.ownerUserId !== null}
-                            >
-                              {r.name_ar}
-                              {r.ownerUserId !== null ? " (مرتبط بصاحب)" : ""}
-                            </SelectItem>
-                          )
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </FormField>
-                </div>
-              ) : null}
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="customer">عميل</SelectItem>
+                  <SelectItem value="restaurant">مطعم</SelectItem>
+                  <SelectItem value="driver">مندوب</SelectItem>
+                  <SelectItem value="admin">أدمن</SelectItem>
+                </SelectContent>
+              </Select>
               {editingUser?.role === "restaurant" ? (
-                <div className="md:col-span-2 rounded-md border bg-muted/30 p-3 text-sm">
-                  <span className="font-semibold">المطعم المرتبط: </span>
-                  {editingUser.restaurant?.name_ar ?? "غير محدد"}
-                </div>
-              ) : null}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  {...editForm.register("is_active")}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-                <Label>نشط</Label>
-              </div>
-              <div className="flex gap-3 md:col-span-2">
-                <Button disabled={updateMutation.isPending}>
-                  {updateMutation.isPending
-                    ? t("common.saving")
-                    : t("common.save")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setEditingUser(null)}
-                >
-                  {t("common.cancel")}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {/* ── User detail panel ─────────────────────────────────── */}
-      {selectedUser ? (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="text-base">
-              {t("users.relatedData")}:{" "}
-              {selectedUser.full_name || selectedUser.id}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4 space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
-              <p>
-                <span className="font-semibold">الاسم: </span>
-                {selectedUser.full_name || "—"}
-              </p>
-              <p>
-                <span className="font-semibold">الموبايل: </span>
-                {selectedUser.phone || "—"}
-              </p>
-              <p>
-                <span className="font-semibold">الدور: </span>
-                {selectedUser.role}
-              </p>
-              {selectedUser.role === "restaurant" ? (
-                <p>
-                  <span className="font-semibold">المطعم المرتبط: </span>
-                  {selectedUser.restaurant?.name_ar ?? "غير محدد"}
+                <p className="text-xs text-muted-foreground">
+                  الدور مرتبط بمطعم — غيّره من صفحة المطعم
                 </p>
               ) : null}
-              <p>
-                <span className="font-semibold">الجنس: </span>
-                {selectedUser.gender || "—"}
-              </p>
-              <p>
-                <span className="font-semibold">نشط: </span>
-                {selectedUser.is_active ? "✅" : "❌"}
-              </p>
-            </div>
-            <p className="mb-2 font-semibold text-sm">آخر 10 طلبات:</p>
-            {relatedOrdersQuery.isLoading ? <LoadingState /> : null}
-            {relatedOrdersQuery.data &&
-            relatedOrdersQuery.data.length === 0 ? (
-              <p className="text-sm text-muted-foreground">لا يوجد طلبات</p>
+            </FormField>
+            {editingUser?.role !== "restaurant" &&
+            editForm.watch("role") === "restaurant" ? (
+              <FormField
+                label="المطعم المرتبط"
+                error={
+                  (editForm.formState.errors as Record<string, { message?: string }>)
+                    .restaurant_id?.message
+                }
+              >
+                <Select
+                  value={editForm.watch("restaurant_id") ?? ""}
+                  onValueChange={(v) => editForm.setValue("restaurant_id", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="اختار المطعم..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(restaurantsQuery.data ?? []).map((r: RestaurantOption) => (
+                      <SelectItem key={r.id} value={r.id} disabled={r.ownerUserId !== null}>
+                        {r.name_ar}
+                        {r.ownerUserId !== null ? " (مرتبط بصاحب)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
             ) : null}
-            {relatedOrdersQuery.data &&
-            relatedOrdersQuery.data.length > 0 ? (
-              <div className="space-y-2">
-                {relatedOrdersQuery.data.map(
-                  (order: {
-                    id: string;
-                    status: string;
-                    total_amount: number;
-                    created_at: string;
-                  }) => (
-                    <div
-                      key={order.id}
-                      className="flex items-center justify-between rounded border p-2 text-sm"
-                    >
-                      <span>{order.status}</span>
-                      <span>{order.total_amount} ج.م</span>
-                      <span className="text-muted-foreground">
-                        {formatDate(order.created_at, locale)}
-                      </span>
-                    </div>
-                  )
-                )}
+            {editingUser?.role === "restaurant" ? (
+              <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                <span className="font-semibold">المطعم المرتبط: </span>
+                {editingUser.restaurant?.name_ar ?? "غير محدد"}
               </div>
             ) : null}
-          </CardContent>
-        </Card>
-      ) : null}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                {...editForm.register("is_active")}
+                className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+              />
+              <Label>نشط</Label>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? t("common.saving") : t("common.save")}
+              </Button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
+
+      {/* ── User detail (modal) ─────────────────────────────────── */}
+      <Modal
+        open={Boolean(selectedUser)}
+        onOpenChange={(open) => !open && setSelectedUser(null)}
+        title={t("users.relatedData")}
+        description={selectedUser?.full_name || selectedUser?.id}
+        size="md"
+      >
+        {selectedUser ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <DetailItem label="الاسم" value={selectedUser.full_name || "—"} />
+              <DetailItem label="الموبايل" value={selectedUser.phone || "—"} dir="ltr" />
+              <DetailItem
+                label="الدور"
+                value={roleOptions.find((o) => o.value === selectedUser.role)?.label ?? selectedUser.role}
+              />
+              <DetailItem label="الجنس" value={selectedUser.gender || "—"} />
+              {selectedUser.role === "restaurant" ? (
+                <DetailItem
+                  label="المطعم المرتبط"
+                  value={selectedUser.restaurant?.name_ar ?? "غير محدد"}
+                />
+              ) : null}
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground">الحالة</p>
+                <div className="mt-1">
+                  <Badge variant={selectedUser.is_active ? "success" : "secondary"}>
+                    {selectedUser.is_active ? "نشط" : "محظور"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-bold">آخر 10 طلبات</p>
+              {relatedOrdersQuery.isLoading ? <LoadingState /> : null}
+              {relatedOrdersQuery.data && relatedOrdersQuery.data.length === 0 ? (
+                <p className="text-sm text-muted-foreground">لا يوجد طلبات</p>
+              ) : null}
+              {relatedOrdersQuery.data && relatedOrdersQuery.data.length > 0 ? (
+                <div className="space-y-2">
+                  {relatedOrdersQuery.data.map(
+                    (order: {
+                      id: string;
+                      status: string;
+                      total_amount: number;
+                      created_at: string;
+                    }) => (
+                      <div
+                        key={order.id}
+                        className="flex items-center justify-between rounded-lg border border-border p-2.5 text-sm"
+                      >
+                        <Badge variant="outline">{order.status}</Badge>
+                        <span className="font-semibold">{order.total_amount} ج.م</span>
+                        <span className="text-muted-foreground">
+                          {formatDate(order.created_at, locale)}
+                        </span>
+                      </div>
+                    )
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
 
       {/* ── Delete confirmation dialog ────────────────────────── */}
       <AlertDialog
         open={Boolean(userToDelete)}
-        onOpenChange={(open: boolean) => { if (!open) setUserToDelete(null); }}
+        onOpenChange={(open: boolean) => {
+          if (!open) setUserToDelete(null);
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -730,9 +669,7 @@ export function UsersModule() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>
-              إلغاء
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>إلغاء</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={deleteMutation.isPending}
@@ -749,6 +686,25 @@ export function UsersModule() {
   );
 }
 
+function DetailItem({
+  label,
+  value,
+  dir,
+}: {
+  label: string;
+  value: string;
+  dir?: "ltr" | "rtl";
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 font-semibold" dir={dir}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function FormField({
   label,
   error,
@@ -762,9 +718,7 @@ function FormField({
     <div className="space-y-2">
       <Label>{label}</Label>
       {children}
-      {error ? (
-        <p className="text-xs text-destructive">{error}</p>
-      ) : null}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }

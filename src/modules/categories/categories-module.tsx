@@ -18,7 +18,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { SearchInput } from "@/components/shared/search-input";
-import { FullScreenDialog } from "@/components/shared/full-screen-dialog";
+import { Modal } from "@/components/shared/modal";
 import { ImageUploader } from "@/components/shared/image-uploader";
 import { formatDate } from "@/lib/format";
 import { toAppError } from "@/lib/errors";
@@ -80,7 +80,7 @@ function CategoryFormFields({
   const imageUrl = form.watch("image_url");
 
   return (
-    <form className="mx-auto max-w-lg space-y-6 p-6" onSubmit={form.handleSubmit(onSubmit)}>
+    <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
       <div className="flex justify-center">
         <ImageUploader
           label="صورة التصنيف"
@@ -107,12 +107,12 @@ function CategoryFormFields({
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "جاري الحفظ…" : submitLabel}
-        </Button>
+      <div className="flex justify-end gap-3 pt-2">
         <Button type="button" variant="outline" onClick={onCancel}>
           إلغاء
+        </Button>
+        <Button type="submit" disabled={isPending}>
+          {isPending ? "جاري الحفظ…" : submitLabel}
         </Button>
       </div>
     </form>
@@ -304,12 +304,13 @@ export function CategoriesModule() {
         />
       ) : null}
 
-      {/* Add Dialog */}
-      <FullScreenDialog
+      {/* Add Modal */}
+      <Modal
         open={addOpen}
         onOpenChange={setAddOpen}
         title={t("categories.createNew")}
         description="أضف تصنيفاً جديداً لقائمة الطعام"
+        size="md"
       >
         <CategoryFormFields
           form={createForm}
@@ -318,14 +319,15 @@ export function CategoriesModule() {
           submitLabel={t("categories.createNew")}
           onCancel={() => setAddOpen(false)}
         />
-      </FullScreenDialog>
+      </Modal>
 
-      {/* Edit Dialog */}
-      <FullScreenDialog
+      {/* Edit Modal */}
+      <Modal
         open={Boolean(editingCategory)}
         onOpenChange={(open) => !open && setEditingCategory(null)}
         title={t("categories.edit")}
         description={editingCategory ? (locale === "ar" ? editingCategory.name_ar : editingCategory.name_en) : ""}
+        size="md"
       >
         <CategoryFormFields
           form={editForm}
@@ -336,7 +338,7 @@ export function CategoriesModule() {
           submitLabel={t("common.save")}
           onCancel={() => setEditingCategory(null)}
         />
-      </FullScreenDialog>
+      </Modal>
 
       <ConfirmDialog
         open={Boolean(deletingCategory)}

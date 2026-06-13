@@ -194,12 +194,12 @@ export function QueryLabModule() {
                   <p className="text-sm text-muted-foreground text-center py-8">لا يوجد نتائج</p>
                 ) : null}
                 {data && data.length > 0 ? (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto rounded-lg border border-border">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b">
+                        <tr className="border-b border-primary/15 bg-accent">
                           {keys.map((k) => (
-                            <th key={k} className="py-2 px-3 text-start font-semibold text-muted-foreground">
+                            <th key={k} className="py-2.5 px-3 text-start font-bold text-accent-foreground">
                               {k}
                             </th>
                           ))}

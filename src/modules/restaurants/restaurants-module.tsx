@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -24,7 +25,6 @@ import { PageHeader } from "@/components/shared/page-header";
 import { SearchInput } from "@/components/shared/search-input";
 import { FullScreenDialog } from "@/components/shared/full-screen-dialog";
 import { ImageUploader } from "@/components/shared/image-uploader";
-import { AddRestaurantWizard } from "./add-restaurant-wizard";
 import { formatDate } from "@/lib/format";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -591,11 +591,11 @@ function RestaurantDetailView({ restaurant }: { restaurant: Restaurant }) {
 
 export function RestaurantsModule() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const t = useTranslations();
   const locale = useLocale();
 
   const [search, setSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
   const [viewingRestaurant, setViewingRestaurant] = useState<Restaurant | null>(null);
   const [editingRestaurant, setEditingRestaurant] = useState<Restaurant | null>(null);
   const [deletingRestaurant, setDeletingRestaurant] = useState<Restaurant | null>(null);
@@ -700,7 +700,7 @@ export function RestaurantsModule() {
         accessorKey: "is_active",
         header: t("restaurants.field.isActive"),
         cell: ({ row }) => (
-          <Badge variant={row.original.is_active ? "default" : "destructive"}>
+          <Badge variant={row.original.is_active ? "success" : "secondary"}>
             {row.original.is_active ? t("restaurants.active") : t("restaurants.inactive")}
           </Badge>
         ),
@@ -760,10 +760,11 @@ export function RestaurantsModule() {
   return (
     <>
       <PageHeader
+        icon={Building2}
         title={t("restaurants.title")}
         description={t("restaurants.description")}
         action={
-          <Button onClick={() => setAddOpen(true)}>
+          <Button onClick={() => router.push("/restaurants/new")}>
             <Plus className="h-4 w-4" />
             {t("restaurants.createNew")}
           </Button>
@@ -788,18 +789,6 @@ export function RestaurantsModule() {
           emptyTitle={t("restaurants.noRestaurants")}
         />
       ) : null}
-
-      {/* Add Dialog — full wizard */}
-      <FullScreenDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        title={t("restaurants.createNew")}
-      >
-        <AddRestaurantWizard
-          onSuccess={() => { setAddOpen(false); refresh(); }}
-          onCancel={() => setAddOpen(false)}
-        />
-      </FullScreenDialog>
 
       {/* Edit Dialog */}
       <FullScreenDialog

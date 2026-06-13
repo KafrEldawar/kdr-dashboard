@@ -24,7 +24,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { SearchInput } from "@/components/shared/search-input";
-import { FullScreenDialog } from "@/components/shared/full-screen-dialog";
+import { Modal } from "@/components/shared/modal";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { branchesService, branchPhonesService } from "@/services/branches";
@@ -139,7 +139,7 @@ function BranchFormFields({
   lockRestaurant?: boolean;
 }) {
   return (
-    <form className="mx-auto max-w-lg space-y-6 p-6" onSubmit={form.handleSubmit(onSubmit)}>
+    <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
       <FormField label="المطعم" error={form.formState.errors.restaurant_id?.message}>
         <Select
           value={form.watch("restaurant_id")}
@@ -398,7 +398,7 @@ export function BranchesModule() {
       ) : null}
 
       {/* Add Dialog */}
-      <FullScreenDialog
+      <Modal size="lg"
         open={addOpen}
         onOpenChange={setAddOpen}
         title={t("branches.createNew")}
@@ -412,10 +412,10 @@ export function BranchesModule() {
           submitLabel={t("branches.createNew")}
           onCancel={() => setAddOpen(false)}
         />
-      </FullScreenDialog>
+      </Modal>
 
       {/* Edit Dialog */}
-      <FullScreenDialog
+      <Modal size="lg"
         open={Boolean(editingBranch)}
         onOpenChange={(open) => {
           if (!open) {
@@ -444,7 +444,7 @@ export function BranchesModule() {
           }}
           lockRestaurant
         />
-      </FullScreenDialog>
+      </Modal>
 
       <ConfirmDialog
         open={Boolean(deletingBranch)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -26,7 +26,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { SearchInput } from "@/components/shared/search-input";
-import { FullScreenDialog } from "@/components/shared/full-screen-dialog";
+import { Modal } from "@/components/shared/modal";
 import { ImageUploader } from "@/components/shared/image-uploader";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -100,7 +100,7 @@ function MenuItemFormFields({
   const imageUrl = form.watch("image_url");
 
   return (
-    <form className="mx-auto max-w-2xl space-y-6 p-6" onSubmit={form.handleSubmit(onSubmit)}>
+    <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
       <div className="flex justify-center">
         <ImageUploader
           label="صورة الصنف"
@@ -211,6 +211,16 @@ export function MenuItemsModule() {
 
   const createForm = useForm<MenuItemForm>({ resolver: zodResolver(schema), defaultValues });
   const editForm = useForm<MenuItemForm>({ resolver: zodResolver(schema), defaultValues });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("new") === "1") {
+      createForm.reset(defaultValues);
+      setAddOpen(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["menu-items"] });
 
@@ -407,7 +417,7 @@ export function MenuItemsModule() {
       ) : null}
 
       {/* Add Dialog */}
-      <FullScreenDialog
+      <Modal size="lg"
         open={addOpen}
         onOpenChange={setAddOpen}
         title={t("menuItems.createNew")}
@@ -422,10 +432,10 @@ export function MenuItemsModule() {
           submitLabel={t("menuItems.createNew")}
           onCancel={() => setAddOpen(false)}
         />
-      </FullScreenDialog>
+      </Modal>
 
       {/* Edit Dialog */}
-      <FullScreenDialog
+      <Modal size="lg"
         open={Boolean(editingItem)}
         onOpenChange={(open) => !open && setEditingItem(null)}
         title={t("menuItems.edit")}
@@ -442,7 +452,7 @@ export function MenuItemsModule() {
           submitLabel={t("common.save")}
           onCancel={() => setEditingItem(null)}
         />
-      </FullScreenDialog>
+      </Modal>
 
       <ConfirmDialog
         open={Boolean(deletingItem)}
