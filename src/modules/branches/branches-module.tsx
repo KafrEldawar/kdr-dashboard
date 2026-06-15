@@ -31,6 +31,7 @@ import { branchesService, branchPhonesService } from "@/services/branches";
 import { restaurantsService } from "@/services/restaurants";
 import { useTranslations, useLocale } from "@/lib/i18n";
 import type { Branch, Restaurant } from "@/types/database";
+import { LeafletMapPicker } from "@/components/maps/leaflet-map-picker";
 
 const schema = z.object({
   restaurant_id: z.string().min(1, "اختر مطعم"),
@@ -39,6 +40,8 @@ const schema = z.object({
   address_ar: z.string().min(3, "العنوان بالعربية مطلوب"),
   address_en: z.string().min(3, "Address in English is required"),
   location_url: z.string().url("رابط الموقع غير صحيح").optional().or(z.literal("")),
+  lat: z.number().nullable().optional(),
+  lng: z.number().nullable().optional(),
   phones: z.array(z.string()),
 });
 
@@ -51,6 +54,8 @@ const defaultValues: BranchForm = {
   address_ar: "",
   address_en: "",
   location_url: "",
+  lat: null,
+  lng: null,
   phones: [],
 };
 
@@ -177,6 +182,20 @@ function BranchFormFields({
             <Input {...form.register("location_url")} dir="ltr" placeholder="https://maps.google.com/..." />
           </FormField>
         </div>
+        <div className="sm:col-span-2">
+          <FormField label="موقع الفرع على الخريطة (مطلوب لاحتساب رسوم التوصيل)">
+            <LeafletMapPicker
+              value={{
+                lat: form.watch("lat") ?? null,
+                lng: form.watch("lng") ?? null,
+              }}
+              onChange={(lat, lng) => {
+                form.setValue("lat", lat, { shouldDirty: true });
+                form.setValue("lng", lng, { shouldDirty: true });
+              }}
+            />
+          </FormField>
+        </div>
       </div>
 
       <PhonesField form={form} />
@@ -246,6 +265,8 @@ export function BranchesModule() {
         address_ar: values.address_ar,
         address_en: values.address_en,
         location_url: values.location_url || null,
+        lat: values.lat ?? null,
+        lng: values.lng ?? null,
       });
       const filteredPhones = values.phones.filter(Boolean);
       if (filteredPhones.length > 0) {
@@ -269,6 +290,8 @@ export function BranchesModule() {
         address_ar: values.address_ar,
         address_en: values.address_en,
         location_url: values.location_url || null,
+        lat: values.lat ?? null,
+        lng: values.lng ?? null,
       });
       await branchPhonesService.syncPhones(id, values.phones.filter(Boolean));
     },
@@ -347,6 +370,8 @@ export function BranchesModule() {
                     address_ar: b.address_ar,
                     address_en: b.address_en,
                     location_url: b.location_url || "",
+                    lat: (b as Branch & { lat: number | null }).lat ?? null,
+                    lng: (b as Branch & { lng: number | null }).lng ?? null,
                     phones: [],
                   });
                 }}

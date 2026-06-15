@@ -80,4 +80,5 @@ export const navItems: NavItem[] = [
   { titleKey: "nav.queryLab", href: "/query-lab", icon: Database, group: "system" },
   { titleKey: "nav.seedData", href: "/seed", icon: Database, group: "system" },
   { titleKey: "nav.settings", href: "/settings", icon: Settings, group: "system" },
+  { titleKey: "nav.deliverySettings", href: "/settings/delivery", icon: Truck, group: "system" },
 ];

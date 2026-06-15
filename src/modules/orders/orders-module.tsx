@@ -26,6 +26,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ordersService } from "@/services/orders";
 import { useLocale } from "@/lib/i18n";
 import type { Order, OrderStatus } from "@/types/database";
+import { OrderRouteMap } from "@/components/maps/order-route-map";
 
 const statusLabels: Record<OrderStatus, string> = {
   pending: "قيد الانتظار",
@@ -235,12 +236,38 @@ export function OrdersModule() {
             <div className="grid grid-cols-2 gap-3">
               <OrderField label="العنوان" value={selectedOrder.delivery_address || "—"} />
               <OrderField label="الموبايل" value={selectedOrder.contact_phone || "—"} dir="ltr" />
+              <OrderField
+                label="رسوم التوصيل"
+                value={
+                  selectedOrder.delivery_fee != null
+                    ? `${Number(selectedOrder.delivery_fee).toFixed(2)} ج.م`
+                    : "—"
+                }
+              />
+              <OrderField
+                label="المسافة"
+                value={
+                  (selectedOrder as Order & { delivery_distance_km?: number | null })
+                    .delivery_distance_km != null
+                    ? `${Number((selectedOrder as Order & { delivery_distance_km: number }).delivery_distance_km).toFixed(2)} كم`
+                    : "—"
+                }
+              />
               {selectedOrder.notes ? (
                 <div className="col-span-2">
                   <OrderField label="ملاحظات" value={selectedOrder.notes} />
                 </div>
               ) : null}
             </div>
+
+            <OrderRouteMap
+              branch={extractPoint(selectedOrder, "branch_lat", "branch_lng")}
+              delivery={extractPoint(selectedOrder, "delivery_lat", "delivery_lng")}
+              distanceKm={
+                (selectedOrder as Order & { delivery_distance_km?: number | null })
+                  .delivery_distance_km ?? null
+              }
+            />
 
             <div>
               <p className="mb-2 text-sm font-bold">تغيير الحالة إلى</p>
@@ -267,6 +294,20 @@ export function OrdersModule() {
       </Modal>
     </>
   );
+}
+
+function extractPoint(
+  order: Order,
+  latKey: string,
+  lngKey: string,
+): { lat: number; lng: number } | null {
+  const row = order as unknown as Record<string, unknown>;
+  const lat = row[latKey];
+  const lng = row[lngKey];
+  if (typeof lat === "number" && typeof lng === "number") {
+    return { lat, lng };
+  }
+  return null;
 }
 
 function OrderField({

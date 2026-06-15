@@ -33,6 +33,7 @@ export const messages = {
     "nav.queryLab": "معمل الاستعلامات",
     "nav.seedData": "بيانات تجريبية",
     "nav.settings": "الإعدادات",
+    "nav.deliverySettings": "إعدادات التوصيل",
 
     // Common actions
     "common.loading": "جاري تحميل البيانات",
@@ -258,6 +259,7 @@ export const messages = {
     "nav.queryLab": "Query Lab",
     "nav.seedData": "Seed Data",
     "nav.settings": "Settings",
+    "nav.deliverySettings": "Delivery Settings",
 
     // Common actions
     "common.loading": "Loading data...",

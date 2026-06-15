@@ -30,6 +30,7 @@ import { categoriesService } from "@/services/categories";
 import { requireSupabase } from "@/lib/supabase/client";
 import { toAppError } from "@/lib/errors";
 import { useLocale } from "@/lib/i18n";
+import { LeafletMapPicker } from "@/components/maps/leaflet-map-picker";
 
 // ── Draft types ───────────────────────────────────────────────────────────────
 
@@ -40,6 +41,8 @@ type DraftBranch = {
   address_ar: string;
   address_en: string;
   location_url: string;
+  lat: number | null;
+  lng: number | null;
   phones: string[];
 };
 
@@ -82,6 +85,8 @@ const branchSchema = z.object({
   address_ar: z.string().min(3, "العنوان بالعربية مطلوب"),
   address_en: z.string().min(3, "Address in English is required"),
   location_url: z.string().url("رابط غير صحيح").optional().or(z.literal("")),
+  lat: z.number().nullable().optional(),
+  lng: z.number().nullable().optional(),
   phones: z.array(z.string()),
 });
 
@@ -118,6 +123,8 @@ const branchDefaults: BranchForm = {
   address_ar: "",
   address_en: "",
   location_url: "",
+  lat: null,
+  lng: null,
   phones: [],
 };
 
@@ -390,6 +397,8 @@ function StepBranches({
       address_ar: values.address_ar,
       address_en: values.address_en,
       location_url: values.location_url ?? "",
+      lat: values.lat ?? null,
+      lng: values.lng ?? null,
       phones: values.phones ?? [],
     });
     form.reset(branchDefaults);
@@ -449,6 +458,20 @@ function StepBranches({
           <div className="sm:col-span-2">
             <FormField label="رابط الخريطة (اختياري)" error={form.formState.errors.location_url?.message}>
               <Input {...form.register("location_url")} dir="ltr" placeholder="https://maps.google.com/..." />
+            </FormField>
+          </div>
+          <div className="sm:col-span-2">
+            <FormField label="موقع الفرع على الخريطة (مطلوب لاحتساب رسوم التوصيل)">
+              <LeafletMapPicker
+                value={{
+                  lat: form.watch("lat") ?? null,
+                  lng: form.watch("lng") ?? null,
+                }}
+                onChange={(lat, lng) => {
+                  form.setValue("lat", lat, { shouldDirty: true });
+                  form.setValue("lng", lng, { shouldDirty: true });
+                }}
+              />
             </FormField>
           </div>
           <div className="sm:col-span-2">
@@ -968,6 +991,8 @@ export function AddRestaurantWizard({ onSuccess, onCancel }: AddRestaurantWizard
             address_ar: b.address_ar,
             address_en: b.address_en,
             location_url: b.location_url || null,
+            lat: b.lat,
+            lng: b.lng,
           });
           const branchId = branchResult.data.id;
           const filteredPhones = b.phones.filter(Boolean);
