@@ -131,7 +131,7 @@ async function handleOrderEvent(
       console.log(`[send-push] owner tokens: ${tokens.length}`);
       const title = "طلب جديد";
       const body = `لديك طلب جديد بقيمة ${order.total_amount}`;
-      const { sent, failed } = await sendFcmBatch(supabase, tokens, title, body, { data: { order_id: orderId, event } });
+      const { sent, failed } = await sendFcmBatch(supabase, tokens, title, body, { data: { order_id: orderId, event }, channelId: "restaurant_channel" });
       console.log(`[send-push] FCM new_order: sent=${sent} failed=${failed}`);
       await supabase.from("user_notifications").insert({
         user_id: owner.user_id, title, body,
@@ -157,6 +157,7 @@ async function handleOrderEvent(
     console.log(`[send-push] customer tokens: ${tokens.length}`);
     const { sent, failed } = await sendFcmBatch(supabase, tokens, "تحديث الطلب", label, {
       data: { order_id: orderId, event, status: order.status },
+      channelId: "customer_channel",
     });
     console.log(`[send-push] FCM status_change: sent=${sent} failed=${failed}`);
     await supabase.from("user_notifications").insert({
@@ -173,7 +174,7 @@ async function handleOrderEvent(
       supabase,
       driverTokens.map((t) => t.token),
       title, body,
-      { data: { order_id: orderId, event } }
+      { data: { order_id: orderId, event }, channelId: "delivery_channel" }
     );
     console.log(`[send-push] FCM order_available: sent=${sent} failed=${failed}`);
     const driverIds = [...new Set(driverTokens.map((t) => t.user_id))];
@@ -194,6 +195,7 @@ async function handleOrderEvent(
     const body = "الطلب جاهز، يمكنك استلامه من المطعم الآن";
     const { sent, failed } = await sendFcmBatch(supabase, tokens, title, body, {
       data: { order_id: orderId, event },
+      channelId: "delivery_channel",
     });
     console.log(`[send-push] FCM order_ready: sent=${sent} failed=${failed}`);
     await supabase.from("user_notifications").insert({
@@ -208,6 +210,7 @@ async function handleOrderEvent(
       const tokens = await getUserTokens(supabase, order.driver_id);
       const { sent, failed } = await sendFcmBatch(supabase, tokens, title, body, {
         data: { order_id: orderId, event },
+        channelId: "delivery_channel",
       });
       console.log(`[send-push] FCM order_cancelled_driver(assigned): sent=${sent} failed=${failed}`);
       await supabase.from("user_notifications").insert({
@@ -220,7 +223,7 @@ async function handleOrderEvent(
         supabase,
         driverTokens.map((t) => t.token),
         title, body,
-        { data: { order_id: orderId, event } }
+        { data: { order_id: orderId, event }, channelId: "delivery_channel" }
       );
       console.log(`[send-push] FCM order_cancelled_driver(pool): sent=${sent} failed=${failed}`);
     }
@@ -273,7 +276,7 @@ async function sendFcmBatch(
   tokens: string[],
   title: string,
   body: string,
-  opts: { image?: string; data?: Record<string, unknown> } = {}
+  opts: { image?: string; data?: Record<string, unknown>; channelId?: string } = {}
 ): Promise<{ sent: number; failed: number }> {
   if (tokens.length === 0) return { sent: 0, failed: 0 };
 
@@ -298,7 +301,14 @@ async function sendFcmBatch(
             notification: { title, body, ...(opts.image ? { image: opts.image } : {}) },
             android: {
               priority: "high",
-              notification: { channel_id: "high_importance_channel", sound: "default" },
+              // Must match a channel the app actually creates (customer_channel /
+              // restaurant_channel / delivery_channel). The legacy
+              // "high_importance_channel" is deleted on the device, so targeting
+              // it drops the notification on Android 8+.
+              notification: {
+                channel_id: opts.channelId ?? "customer_channel",
+                sound: "default",
+              },
             },
             apns: {
               headers: { "apns-priority": "10" },

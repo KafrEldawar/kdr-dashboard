@@ -5,7 +5,8 @@ import dynamic from "next/dynamic";
 import type { LatLngExpression, Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, MapPin, Search } from "lucide-react";
+import { Loader2, Link2, MapPin, Search } from "lucide-react";
+import { parseGoogleMapsUrl, isShortGoogleMapsLink } from "@/lib/google-maps-url";
 import "leaflet/dist/leaflet.css";
 
 const MapContainer = dynamic(
@@ -37,6 +38,8 @@ export function LeafletMapPicker({
 }: LeafletMapPickerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
+  const [urlValue, setUrlValue] = useState("");
+  const [urlError, setUrlError] = useState<string | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<LeafletMarker | null>(null);
   const [iconReady, setIconReady] = useState(false);
@@ -92,6 +95,23 @@ export function LeafletMapPicker({
     }
   }
 
+  function extractFromUrl(raw?: string) {
+    const text = (raw ?? urlValue).trim();
+    if (!text) return;
+    const coords = parseGoogleMapsUrl(text);
+    if (!coords) {
+      setUrlError(
+        isShortGoogleMapsLink(text)
+          ? "الرابط مختصر — افتحه في المتصفح وانسخ الرابط الكامل ثم الصقه"
+          : "تعذّر استخراج الإحداثيات — تأكد إنه رابط موقع من Google Maps",
+      );
+      return;
+    }
+    setUrlError(null);
+    onChange(coords.lat, coords.lng);
+    mapRef.current?.setView([coords.lat, coords.lng], 16);
+  }
+
   function useMyLocation() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -128,6 +148,38 @@ export function LeafletMapPicker({
           <MapPin className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Paste a Google Maps link → auto-extract coordinates + move the pin */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Link2 className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="ps-9"
+            dir="ltr"
+            placeholder="الصق رابط Google Maps لتحديد الدبوس"
+            value={urlValue}
+            onChange={(e) => {
+              setUrlValue(e.target.value);
+              if (urlError) setUrlError(null);
+            }}
+            onPaste={(e) => {
+              const text = e.clipboardData.getData("text");
+              setUrlValue(text);
+              setTimeout(() => extractFromUrl(text), 0);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                extractFromUrl();
+              }
+            }}
+          />
+        </div>
+        <Button type="button" variant="outline" onClick={() => extractFromUrl()}>
+          استخراج
+        </Button>
+      </div>
+      {urlError ? <p className="text-xs text-destructive">{urlError}</p> : null}
 
       <div className="overflow-hidden rounded border" style={{ height }}>
         {iconReady && (
