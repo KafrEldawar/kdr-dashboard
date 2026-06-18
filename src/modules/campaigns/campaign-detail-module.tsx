@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ArrowRight, Pause, Play, RefreshCw } from "lucide-react";
+import { ArrowRight, Pause, Play, RefreshCw, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,15 @@ export function CampaignDetailModule({ campaignId }: { campaignId: string }) {
     onError: (e) => toast.error(toAppError(e).message),
   });
 
+  const dispatchNowMutation = useMutation({
+    mutationFn: () => campaignsService.dispatchNow(campaignId),
+    onSuccess: (res) => {
+      toast.success(`بدأ الإرسال (${res.requeued} مستلم)`);
+      refresh();
+    },
+    onError: (e) => toast.error(toAppError(e).message),
+  });
+
   const columns = useMemo<ColumnDef<CampaignRecipient>[]>(
     () => [
       {
@@ -142,6 +151,8 @@ export function CampaignDetailModule({ campaignId }: { campaignId: string }) {
   const c = campaignQuery.data!;
   const canPause = c.status === "running" || c.status === "scheduled";
   const canResume = c.status === "paused";
+  const canDispatchNow =
+    c.status === "scheduled" || c.status === "paused" || c.status === "draft";
   const hasFailed = c.failed_count > 0;
   const progressPct =
     c.total_recipients > 0
@@ -187,6 +198,15 @@ export function CampaignDetailModule({ campaignId }: { campaignId: string }) {
           <div className="h-full bg-primary" style={{ width: `${progressPct}%` }} />
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
+          {canDispatchNow ? (
+            <Button
+              onClick={() => dispatchNowMutation.mutate()}
+              disabled={dispatchNowMutation.isPending}
+            >
+              <Send className="h-4 w-4" />
+              {dispatchNowMutation.isPending ? "جاري…" : "إرسال الآن"}
+            </Button>
+          ) : null}
           {canPause ? (
             <Button
               variant="secondary"

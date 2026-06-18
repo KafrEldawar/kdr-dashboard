@@ -194,6 +194,12 @@ export const campaignsService = {
     );
   },
 
+  async dispatchNow(campaignId: string): Promise<{ requeued: number; status: string }> {
+    return unwrapRpc<{ requeued: number; status: string }>(
+      await db().rpc("rpc_admin_dispatch_now", { p_campaign_id: campaignId })
+    );
+  },
+
   async delete(campaignId: string): Promise<void> {
     const res = await db().from("whatsapp_campaigns").delete().eq("id", campaignId);
     if (res.error) throw res.error;

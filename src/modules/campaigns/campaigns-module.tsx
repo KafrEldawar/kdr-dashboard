@@ -134,8 +134,11 @@ export function CampaignsModule() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (values: CampaignForm) => {
-      const scheduleIso = new Date(values.schedule_start_at).toISOString();
+    mutationFn: async (params: { values: CampaignForm; sendNow: boolean }) => {
+      const { values, sendNow } = params;
+      const scheduleIso = sendNow
+        ? new Date().toISOString()
+        : new Date(values.schedule_start_at).toISOString();
       const created = await campaignsService.create({
         title: values.title,
         bodyTemplate: values.body_template,
@@ -160,10 +163,18 @@ export function CampaignsModule() {
         customPhones,
         customNames,
       });
-      return attached;
+
+      if (sendNow) {
+        await campaignsService.dispatchNow(created.campaign_id);
+      }
+      return { ...attached, sendNow };
     },
     onSuccess: (res) => {
-      toast.success(`تم جدولة الحملة (${res.total} مستلم)`);
+      toast.success(
+        res.sendNow
+          ? `بدأ الإرسال الآن (${res.total} مستلم)`
+          : `تم جدولة الحملة (${res.total} مستلم)`
+      );
       createForm.reset({ ...defaultValues, schedule_start_at: defaultStart() });
       setAddOpen(false);
       refresh();
@@ -366,7 +377,9 @@ export function CampaignsModule() {
       >
         <form
           className="space-y-5"
-          onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))}
+          onSubmit={createForm.handleSubmit((v) =>
+            createMutation.mutate({ values: v, sendNow: false })
+          )}
         >
           <Field label="عنوان داخلي" error={createForm.formState.errors.title?.message}>
             <Input
@@ -486,9 +499,19 @@ export function CampaignsModule() {
             />
           </Field>
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex flex-wrap justify-end gap-3 pt-2">
             <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
               إلغاء
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={createMutation.isPending}
+              onClick={createForm.handleSubmit((v) =>
+                createMutation.mutate({ values: v, sendNow: true })
+              )}
+            >
+              {createMutation.isPending ? "جاري…" : "إرسال الآن"}
             </Button>
             <Button disabled={createMutation.isPending}>
               {createMutation.isPending ? "جاري الإنشاء…" : "إنشاء وجدولة"}
