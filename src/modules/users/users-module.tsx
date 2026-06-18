@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Edit, Eye, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { CheckCircle2, Edit, Eye, ShieldCheck, Trash2, UserPlus, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,7 @@ const editUserSchema = z.object({
   phone: z.string().optional(),
   role: z.enum(["customer", "restaurant", "driver", "admin"]),
   is_active: z.boolean(),
+  whatsapp_opt_in: z.boolean(),
   restaurant_id: z.string().optional(),
 });
 
@@ -144,6 +145,7 @@ export function UsersModule() {
       phone: "",
       role: "customer",
       is_active: true,
+      whatsapp_opt_in: true,
       restaurant_id: "",
     },
   });
@@ -203,6 +205,7 @@ export function UsersModule() {
           fullName: values.full_name,
           phone: values.phone || undefined,
           isActive: values.is_active,
+          whatsappOptIn: values.whatsapp_opt_in,
         });
         await usersService.linkOwnerToRestaurant(id, values.restaurant_id);
         void queryClient.invalidateQueries({
@@ -216,6 +219,7 @@ export function UsersModule() {
         phone: values.phone || undefined,
         role: values.role,
         isActive: values.is_active,
+        whatsappOptIn: values.whatsapp_opt_in,
       });
     },
     onSuccess: () => {
@@ -266,7 +270,37 @@ export function UsersModule() {
       {
         accessorKey: "phone",
         header: t("users.field.phone"),
-        cell: ({ row }) => <span dir="ltr">{row.original.phone || "—"}</span>,
+        cell: ({ row }) => (
+          <div className="flex items-center gap-2">
+            <span dir="ltr">{row.original.phone || "—"}</span>
+            {row.original.phone ? (
+              row.original.phone_verified_at ? (
+                <span
+                  title="رقم موثّق"
+                  className="inline-flex items-center gap-1 text-emerald-600"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                </span>
+              ) : (
+                <span
+                  title="غير موثّق"
+                  className="inline-flex items-center gap-1 text-muted-foreground"
+                >
+                  <XCircle className="h-4 w-4" />
+                </span>
+              )
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "whatsapp_opt_in",
+        header: "واتساب",
+        cell: ({ row }) => (
+          <Badge variant={row.original.whatsapp_opt_in ? "success" : "secondary"}>
+            {row.original.whatsapp_opt_in ? "مشترك" : "متوقف"}
+          </Badge>
+        ),
       },
       {
         accessorKey: "role",
@@ -313,6 +347,7 @@ export function UsersModule() {
                     phone: user.phone ?? "",
                     role: user.role,
                     is_active: user.is_active,
+                    whatsapp_opt_in: user.whatsapp_opt_in,
                     restaurant_id: "",
                   });
                 }}
@@ -569,6 +604,19 @@ export function UsersModule() {
               />
               <Label>نشط</Label>
             </div>
+            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
+              <div>
+                <Label>الاشتراك في رسائل واتساب التسويقية</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  لو متوقف، الحملات هتتخطّى المستخدم تلقائياً.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                {...editForm.register("whatsapp_opt_in")}
+                className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+              />
+            </div>
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>
                 {t("common.cancel")}
@@ -593,7 +641,19 @@ export function UsersModule() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <DetailItem label="الاسم" value={selectedUser.full_name || "—"} />
-              <DetailItem label="الموبايل" value={selectedUser.phone || "—"} dir="ltr" />
+              <DetailItem
+                label="الموبايل"
+                value={
+                  selectedUser.phone
+                    ? `${selectedUser.phone} ${selectedUser.phone_verified_at ? "✓ موثّق" : "(غير موثّق)"}`
+                    : "—"
+                }
+                dir="ltr"
+              />
+              <DetailItem
+                label="اشتراك واتساب"
+                value={selectedUser.whatsapp_opt_in ? "مشترك" : "متوقف"}
+              />
               <DetailItem
                 label="الدور"
                 value={roleOptions.find((o) => o.value === selectedUser.role)?.label ?? selectedUser.role}

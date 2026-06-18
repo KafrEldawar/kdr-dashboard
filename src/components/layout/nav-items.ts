@@ -11,8 +11,10 @@ import {
   MapPin,
   MessageSquare,
   Percent,
+  Send,
   Settings,
   ShoppingCart,
+  Smartphone,
   Store,
   Tags,
   Truck,
@@ -74,6 +76,8 @@ export const navItems: NavItem[] = [
 
   { titleKey: "nav.offers", href: "/offers", icon: Gift, group: "marketing" },
   { titleKey: "nav.promoCodes", href: "/promo-codes", icon: Percent, group: "marketing" },
+  { titleKey: "nav.campaigns", href: "/campaigns", icon: Send, group: "marketing" },
+  { titleKey: "nav.whatsapp", href: "/whatsapp", icon: Smartphone, group: "marketing" },
   { titleKey: "nav.reviews", href: "/reviews", icon: MessageSquare, group: "marketing" },
   { titleKey: "nav.favorites", href: "/favorites", icon: Heart, group: "marketing" },
 

@@ -24,6 +24,8 @@ export type AdminUser = {
   avatar_url: string | null;
   is_active: boolean;
   created_at: string;
+  phone_verified_at: string | null;
+  whatsapp_opt_in: boolean;
   restaurant: { id: string; name_ar: string; name_en: string } | null;
 };
 
@@ -84,6 +86,7 @@ export const adminService = {
     isActive?: boolean;
     fullName?: string;
     phone?: string;
+    whatsappOptIn?: boolean;
   }) {
     const { data, error } = await rpc("rpc_admin_update_user", {
       p_user_id: params.userId,
@@ -91,6 +94,7 @@ export const adminService = {
       p_is_active: params.isActive ?? null,
       p_full_name: params.fullName ?? null,
       p_phone: params.phone ?? null,
+      p_whatsapp_opt_in: params.whatsappOptIn ?? null,
     });
     if (error) throw error;
     return data;
