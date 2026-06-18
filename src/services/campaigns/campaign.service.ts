@@ -201,7 +201,12 @@ export const campaignsService = {
   },
 
   async delete(campaignId: string): Promise<void> {
-    const res = await db().from("whatsapp_campaigns").delete().eq("id", campaignId);
-    if (res.error) throw res.error;
+    // Go through an RPC because the table's RLS exposes SELECT only.
+    // A raw delete would silently affect 0 rows and look like success.
+    unwrapRpc(
+      await db().rpc("rpc_admin_delete_whatsapp_campaign", {
+        p_campaign_id: campaignId,
+      })
+    );
   },
 };
