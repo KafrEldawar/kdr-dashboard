@@ -6,7 +6,10 @@
  * recognize for OTP-shaped secrets.
  */
 
-import * as bcrypt from "https://esm.sh/bcryptjs@2.4.3";
+// esm.sh wraps the CommonJS bcryptjs module, so `import *` puts the
+// functions under `.default`. Using the default import gives us the
+// natural `bcrypt.hash(...)` / `bcrypt.compare(...)` shape.
+import bcrypt from "https://esm.sh/bcryptjs@2.4.3";
 
 /** Generate a uniformly random 6-digit numeric OTP as a string. */
 export function generateCode(): string {
