@@ -33,7 +33,11 @@ import { formatDate } from "@/lib/format";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useLocale } from "@/lib/i18n";
-import { campaignsService, type WhatsappCampaign } from "@/services/campaigns";
+import {
+  campaignsService,
+  type CampaignStatus,
+  type WhatsappCampaign,
+} from "@/services/campaigns";
 import {
   parsePhonesInput,
   statusBadgeVariant,
@@ -113,7 +117,10 @@ export function CampaignsModule() {
     queryFn: () =>
       campaignsService.list({
         search: debouncedSearch || undefined,
-        status: statusFilter === "all" ? undefined : (statusFilter as never),
+        status:
+          statusFilter === "all"
+            ? undefined
+            : (statusFilter as CampaignStatus),
         pageSize: 50,
       }),
   });
