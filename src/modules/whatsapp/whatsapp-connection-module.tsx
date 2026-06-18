@@ -151,7 +151,7 @@ export function WhatsappConnectionModule() {
                 />
               ) : (
                 <p className="px-4 text-xs text-muted-foreground">
-                  جاري توليد الكود… إذا طالت المدة، اضغط "إعادة الاتصال".
+                  جاري توليد الكود… إذا طالت المدة، اضغط «إعادة الاتصال».
                 </p>
               )}
             </div>
