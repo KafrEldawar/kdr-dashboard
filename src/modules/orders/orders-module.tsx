@@ -236,6 +236,10 @@ export function OrdersModule() {
             <div className="grid grid-cols-2 gap-3">
               <OrderField label="العنوان" value={selectedOrder.delivery_address || "—"} />
               <OrderField label="الموبايل" value={selectedOrder.contact_phone || "—"} dir="ltr" />
+              {/* TODO: surface selectedOrder.alternate_phone here once the
+                  design for the dashboard order detail is approved. The
+                  field is already plumbed through the DB (orders.alternate_phone)
+                  and the Database TS types since migration 037. */}
               <OrderField
                 label="رسوم التوصيل"
                 value={

@@ -796,6 +796,7 @@ export type Database = {
       orders: {
         Row: {
           accepted_at: string | null
+          alternate_phone: string | null
           branch_id: string | null
           branch_lat: number | null
           branch_lng: number | null
@@ -833,6 +834,7 @@ export type Database = {
         }
         Insert: {
           accepted_at?: string | null
+          alternate_phone?: string | null
           branch_id?: string | null
           branch_lat?: number | null
           branch_lng?: number | null
@@ -870,6 +872,7 @@ export type Database = {
         }
         Update: {
           accepted_at?: string | null
+          alternate_phone?: string | null
           branch_id?: string | null
           branch_lat?: number | null
           branch_lng?: number | null
@@ -1585,6 +1588,7 @@ export type Database = {
       }
       rpc_checkout: {
         Args: {
+          p_alternate_phone?: string
           p_branch_id?: string
           p_contact_phone?: string
           p_delivery_address?: string
