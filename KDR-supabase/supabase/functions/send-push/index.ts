@@ -351,9 +351,11 @@ async function getTargetTokens(
   targetType: string,
   filter: Record<string, unknown> | null
 ): Promise<{ token: string; user_id: string }[]> {
+  // Inner join on profiles so the driver-availability filter below can
+  // hit `profiles.is_available` without a second round-trip.
   let query = supabase
     .from("device_tokens")
-    .select("token, user_id, profiles!inner(role)")
+    .select("token, user_id, profiles!inner(role, is_available)")
     .eq("is_active", true);
 
   switch (targetType) {
@@ -365,6 +367,11 @@ async function getTargetTokens(
       if (filter?.platform)  query = query.eq("platform", filter.platform as string);
       if (filter?.role)      query = query.eq("profiles.role", filter.role as string);
       if (filter?.user_ids)  query = query.in("user_id", filter.user_ids as string[]);
+      // When the caller targets drivers, skip those who paused themselves
+      // via the in-app availability toggle (`profiles.is_available = false`).
+      if (filter?.role === "driver") {
+        query = query.eq("profiles.is_available", true);
+      }
       break;
   }
 
