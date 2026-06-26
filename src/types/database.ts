@@ -808,6 +808,7 @@ export type Database = {
           delivered_at: string | null
           delivery_address: string | null
           delivery_address_id: string | null
+          delivery_by_owner: boolean
           delivery_distance_km: number | null
           delivery_fee: number
           delivery_lat: number | null
@@ -846,6 +847,7 @@ export type Database = {
           delivered_at?: string | null
           delivery_address?: string | null
           delivery_address_id?: string | null
+          delivery_by_owner?: boolean
           delivery_distance_km?: number | null
           delivery_fee?: number
           delivery_lat?: number | null
@@ -884,6 +886,7 @@ export type Database = {
           delivered_at?: string | null
           delivery_address?: string | null
           delivery_address_id?: string | null
+          delivery_by_owner?: boolean
           delivery_distance_km?: number | null
           delivery_fee?: number
           delivery_lat?: number | null
@@ -955,6 +958,8 @@ export type Database = {
       }
       profiles: {
         Row: {
+          alternate_phone: string | null
+          alternate_phone_verified_at: string | null
           avatar_url: string | null
           created_at: string
           full_name: string | null
@@ -966,6 +971,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          alternate_phone?: string | null
+          alternate_phone_verified_at?: string | null
           avatar_url?: string | null
           created_at?: string
           full_name?: string | null
@@ -977,6 +984,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          alternate_phone?: string | null
+          alternate_phone_verified_at?: string | null
           avatar_url?: string | null
           created_at?: string
           full_name?: string | null

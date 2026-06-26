@@ -5,6 +5,12 @@ export type FinancialTotals = {
   gross_sales: number;
   platform_revenue: number;
   restaurant_revenue: number;
+  /// Count of completed orders where the restaurant did the delivery
+  /// themselves instead of the driver pool (migration 044).
+  self_delivery_orders_count: number;
+  /// Sum of `delivery_fee` on those orders. Goes 100% to the restaurant —
+  /// no platform commission applies to delivery.
+  self_delivery_earnings: number;
 };
 
 export type FinancialPeriod = FinancialTotals & { period: string };
@@ -18,6 +24,8 @@ export type FinancialRestaurantRow = {
   gross_sales: number;
   platform_revenue: number;
   restaurant_revenue: number;
+  self_delivery_orders_count: number;
+  self_delivery_earnings: number;
 };
 
 export type FinancialReport = {

@@ -1,9 +1,16 @@
 /**
  * send-otp Edge Function
  *
- * POST { phone }
- *   → normalize phone, rate-limit check, generate code, hash + persist,
- *     call Railway /send-otp.
+ * POST { phone, purpose? }
+ *   purpose: 'login' (default) | 'attach'
+ *     'login'  — phone-first signup / primary-phone re-verify (no auth header
+ *                needed; verify-otp will mint a session or attach to the
+ *                logged-in user's primary phone).
+ *     'attach' — logged-in user adding a verified ALTERNATE phone to their
+ *                profile; verify-otp writes to profiles.alternate_phone
+ *                without minting a session or touching auth.users.
+ *
+ *   The rate limit is shared per-phone regardless of purpose.
  *
  * Response (success):
  *   { ok: true, sends_remaining_in_window, sends_remaining_today,
@@ -38,6 +45,11 @@ Deno.serve(async (req) => {
       return json({ ok: false, reason: "invalid_phone" }, 400);
     }
 
+    // 'login' is the historical behaviour; 'attach' marks an OTP intended
+    // for the alternate-phone attachment flow. Anything unknown is treated
+    // as 'login' so old clients keep working.
+    const purpose = body?.purpose === "attach" ? "attach" : "login";
+
     const svc = serviceClient();
     const decision = await checkAndIncrement(svc, phone);
     if (!decision.allowed) {
@@ -56,7 +68,7 @@ Deno.serve(async (req) => {
     const { error: insertErr } = await svc.from("otp_codes").insert({
       phone,
       code_hash:    codeHash,
-      purpose:      "login",          // verify-otp decides attached vs signup
+      purpose,
       expires_at:   expiresAt,
       max_attempts: 5,
     });

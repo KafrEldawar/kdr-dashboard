@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Banknote, ClipboardList, Store, Wallet } from "lucide-react";
+import { Banknote, Bike, ClipboardList, Store, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -110,6 +110,15 @@ export function FinanceModule() {
         header: "إيراد المطعم",
         cell: ({ row }) => egp(row.original.restaurant_revenue),
       },
+      {
+        accessorKey: "self_delivery_earnings",
+        header: "إيراد التوصيل الذاتي",
+        cell: ({ row }) => (
+          <span title={`${row.original.self_delivery_orders_count} طلب`}>
+            {egp(row.original.self_delivery_earnings)}
+          </span>
+        ),
+      },
     ],
     [locale]
   );
@@ -196,6 +205,15 @@ export function FinanceModule() {
               icon={Store}
             />
           </div>
+          {totals.self_delivery_orders_count > 0 ? (
+            <div className="mb-6">
+              <StatCard
+                label={`إيراد التوصيل الذاتي (${totals.self_delivery_orders_count} طلب)`}
+                value={egp(totals.self_delivery_earnings)}
+                icon={Bike}
+              />
+            </div>
+          ) : null}
 
           {/* Per-period breakdown */}
           <h3 className="mb-2 text-sm font-semibold text-muted-foreground">

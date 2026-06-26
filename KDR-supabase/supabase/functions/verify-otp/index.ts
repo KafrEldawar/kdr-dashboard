@@ -1,15 +1,23 @@
 /**
  * verify-otp Edge Function
  *
- * POST { phone, code }
+ * POST { phone, code, purpose? }
  *
- * Behaviour depends on the Authorization header:
+ * Behaviour depends on the Authorization header and the optional purpose:
  *
- *   • Bearer present  (existing logged-in user adding/changing phone)
+ *   • purpose='attach' + Bearer present
+ *     ─ verify code → set profiles.alternate_phone +
+ *       alternate_phone_verified_at on the logged-in user
+ *     ─ does NOT touch profiles.phone, auth.users, or mint a session
+ *     ─ rejects if the phone is the caller's primary or already attached
+ *       to another account (primary or alternate)
+ *     ─ return { ok: true, mode: 'alt_attached' }
+ *
+ *   • purpose='login' (default) + Bearer present
  *     ─ verify code → set profiles.phone + phone_verified_at
  *     ─ return { ok: true, mode: 'attached' }
  *
- *   • No Bearer      (phone-first signup or returning phone user)
+ *   • purpose='login' + No Bearer  (phone-first signup or returning user)
  *     ─ verify code
  *     ─ if a Supabase auth.user with this phone exists, mint a session
  *       and set phone_verified_at on its profile
@@ -48,6 +56,7 @@ Deno.serve(async (req) => {
     const body  = await req.json().catch(() => ({}));
     const phone = normalizeE164(body?.phone);
     const code  = typeof body?.code === "string" ? body.code.trim() : "";
+    const purpose = body?.purpose === "attach" ? "attach" : "login";
 
     if (!phone)              return json({ ok: false, reason: "invalid_phone" }, 400);
     if (!/^\d{4,8}$/.test(code))
@@ -97,8 +106,48 @@ Deno.serve(async (req) => {
       }, 401);
     }
 
-    // 3) Attached-mode branch (existing session).
+    // 3) Attached-mode branches (existing session).
     const existingUserId = await userIdFromAuthHeader(req);
+
+    if (existingUserId && purpose === "attach") {
+      // Alt-phone attach. Write to the alternate_phone columns only —
+      // never touches the primary or auth.users.
+      const { data: me, error: meErr } = await svc
+        .from("profiles")
+        .select("phone")
+        .eq("id", existingUserId)
+        .maybeSingle();
+      if (meErr) return json({ ok: false, error: meErr.message }, 500);
+
+      if (me?.phone && me.phone === phone) {
+        return json({ ok: false, reason: "alt_equals_primary" }, 409);
+      }
+
+      // Uniqueness — the phone can't already be someone else's primary
+      // or alternate. Hits the unique indexes added by 043.
+      const { data: clash } = await svc
+        .from("profiles")
+        .select("id")
+        .or(`phone.eq.${phone},alternate_phone.eq.${phone}`)
+        .neq("id", existingUserId)
+        .limit(1)
+        .maybeSingle();
+      if (clash) {
+        return json({ ok: false, reason: "phone_in_use" }, 409);
+      }
+
+      const { error: upErr } = await svc
+        .from("profiles")
+        .update({
+          alternate_phone:             phone,
+          alternate_phone_verified_at: new Date().toISOString(),
+        })
+        .eq("id", existingUserId);
+      if (upErr) return json({ ok: false, error: upErr.message }, 500);
+
+      return json({ ok: true, mode: "alt_attached" });
+    }
+
     if (existingUserId) {
       await svc
         .from("profiles")

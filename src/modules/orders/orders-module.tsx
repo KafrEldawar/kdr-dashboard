@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
-import { ClipboardList } from "lucide-react";
+import { Bike, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/modal";
 import { cn } from "@/lib/utils";
@@ -75,6 +75,21 @@ const statusStyle: Record<OrderStatus, { pill: string; dot: string }> = {
   },
 };
 
+/// Marks an order delivered by the restaurant owner instead of a
+/// platform driver. Renders as a small chip next to the status pill so
+/// support can spot self-delivery without opening the detail modal.
+function SelfDeliveryBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700 ring-1 ring-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:ring-orange-500/25"
+      title="توصيل من المطعم"
+    >
+      <Bike className="h-3 w-3" />
+      توصيل ذاتي
+    </span>
+  );
+}
+
 function OrderStatusBadge({
   status,
   size = "sm",
@@ -142,7 +157,12 @@ export function OrdersModule() {
       {
         accessorKey: "status",
         header: "الحالة",
-        cell: ({ row }) => <OrderStatusBadge status={row.original.status} />,
+        cell: ({ row }) => (
+          <div className="flex items-center gap-1.5">
+            <OrderStatusBadge status={row.original.status} />
+            {row.original.delivery_by_owner ? <SelfDeliveryBadge /> : null}
+          </div>
+        ),
       },
       {
         accessorKey: "total_amount",
@@ -225,7 +245,10 @@ export function OrdersModule() {
             <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 p-3.5">
               <div className="flex flex-col gap-1.5">
                 <span className="text-xs font-medium text-muted-foreground">الحالة الحالية</span>
-                <OrderStatusBadge status={selectedOrder.status} size="lg" />
+                <div className="flex items-center gap-2">
+                  <OrderStatusBadge status={selectedOrder.status} size="lg" />
+                  {selectedOrder.delivery_by_owner ? <SelfDeliveryBadge /> : null}
+                </div>
               </div>
               <div className="text-end">
                 <span className="text-xs text-muted-foreground">الإجمالي</span>
