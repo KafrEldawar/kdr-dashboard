@@ -629,13 +629,21 @@ begin
             and status = 'delivered')
     ),
     'recent_orders', coalesce(
+      -- jsonb_agg(...) order by needs its source set to already be the
+      -- top-10. Applying ORDER BY + LIMIT outside the aggregate is illegal
+      -- (the column isn't grouped/aggregated) and broke the whole RPC.
       (select jsonb_agg(jsonb_build_object(
-         'id', o.id, 'status', o.status, 'total_amount', o.total_amount,
-         'created_at', o.created_at,
-         'customer_name', (select p.full_name from profiles p where p.id = o.user_id)
-       ) order by o.created_at desc)
-       from orders o where o.restaurant_id = v_rest_id
-       order by o.created_at desc limit 10),
+         'id', sub.id, 'status', sub.status, 'total_amount', sub.total_amount,
+         'created_at', sub.created_at,
+         'customer_name', (select p.full_name from profiles p where p.id = sub.user_id)
+       ) order by sub.created_at desc)
+       from (
+         select id, status, total_amount, created_at, user_id
+         from orders
+         where restaurant_id = v_rest_id
+         order by created_at desc
+         limit 10
+       ) sub),
       '[]'::jsonb
     )
   );

@@ -59,12 +59,12 @@ export async function POST(request: Request) {
 
   const url = new URL(request.url);
   const action = url.searchParams.get("action") ?? "restart";
-  if (action !== "restart") {
+  if (action !== "restart" && action !== "wipe") {
     return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
   }
 
   try {
-    const res = await fetch(`${cfg.url}/session/restart`, {
+    const res = await fetch(`${cfg.url}/session/${action}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${cfg.token}` },
     });

@@ -1,10 +1,27 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, MessageCircle, RefreshCw, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  MessageCircle,
+  RefreshCw,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -25,14 +42,15 @@ async function fetchStatus(): Promise<SessionStatus> {
   return body as SessionStatus;
 }
 
-async function restartSession(): Promise<void> {
-  const res = await fetch("/api/whatsapp/session?action=restart", { method: "POST" });
+async function postAction(action: "restart" | "wipe"): Promise<void> {
+  const res = await fetch(`/api/whatsapp/session?action=${action}`, { method: "POST" });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
 }
 
 export function WhatsappConnectionModule() {
   const queryClient = useQueryClient();
+  const [confirmWipe, setConfirmWipe] = useState(false);
 
   const statusQuery = useQuery({
     queryKey: ["whatsapp-session-status"],
@@ -42,7 +60,7 @@ export function WhatsappConnectionModule() {
   });
 
   const restartMutation = useMutation({
-    mutationFn: restartSession,
+    mutationFn: () => postAction("restart"),
     onSuccess: () => {
       toast.success("جاري إعادة تشغيل الجلسة…");
       void queryClient.invalidateQueries({ queryKey: ["whatsapp-session-status"] });
@@ -50,8 +68,18 @@ export function WhatsappConnectionModule() {
     onError: (error) => toast.error(toAppError(error).message),
   });
 
+  const wipeMutation = useMutation({
+    mutationFn: () => postAction("wipe"),
+    onSuccess: () => {
+      toast.success("تم مسح الجلسة. امسح الكود الجديد لربط رقم جديد.");
+      void queryClient.invalidateQueries({ queryKey: ["whatsapp-session-status"] });
+    },
+    onError: (error) => toast.error(toAppError(error).message),
+  });
+
   const status = statusQuery.data;
   const connected = status?.connected === true;
+  const busy = restartMutation.isPending || wipeMutation.isPending;
 
   return (
     <>
@@ -60,16 +88,49 @@ export function WhatsappConnectionModule() {
         title="اتصال واتساب"
         description="امسح كود QR لربط رقم واتساب الخاص بالخدمة. يُستخدم لإرسال رموز OTP والحملات التسويقية."
         action={
-          <Button
-            variant="outline"
-            disabled={restartMutation.isPending}
-            onClick={() => restartMutation.mutate()}
-          >
-            <RefreshCw className="h-4 w-4" />
-            {restartMutation.isPending ? "جاري…" : "إعادة الاتصال"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => restartMutation.mutate()}
+            >
+              <RefreshCw className="h-4 w-4" />
+              {restartMutation.isPending ? "جاري…" : "إعادة الاتصال"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setConfirmWipe(true)}
+              className="border-destructive/40 text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-4 w-4" />
+              مسح الجلسة وربط رقم جديد
+            </Button>
+          </div>
         }
       />
+
+      <AlertDialog open={confirmWipe} onOpenChange={setConfirmWipe}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>مسح جلسة واتساب الحالية؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              ده هيمسح بيانات الربط نهائياً ويولّد كود QR جديد عشان تربط رقم
+              جديد. الرقم الحالي (إن وجد) هيقع. استخدم هذه الخطوة لو «إعادة
+              الاتصال» مش راضي يولّد كود جديد.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => wipeMutation.mutate()}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              نعم، امسح وابدأ من جديد
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {statusQuery.isLoading ? <LoadingState /> : null}
       {statusQuery.isError ? (
@@ -150,9 +211,16 @@ export function WhatsappConnectionModule() {
                   className="h-full w-full rounded-lg object-contain p-2"
                 />
               ) : (
-                <p className="px-4 text-xs text-muted-foreground">
-                  جاري توليد الكود… إذا طالت المدة، اضغط «إعادة الاتصال».
-                </p>
+                <div className="flex flex-col items-center gap-2 px-4 text-center">
+                  <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">
+                    جاري توليد الكود…
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/80">
+                    لو ما ظهرش الكود خلال 30 ثانية، جرّب «مسح الجلسة وربط رقم
+                    جديد» — ده بيمسح بيانات الربط القديمة ويعمل كود نضيف.
+                  </p>
+                </div>
               )}
             </div>
           </div>

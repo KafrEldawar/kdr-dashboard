@@ -3,7 +3,14 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Banknote, Bike, ClipboardList, Store, Wallet } from "lucide-react";
+import {
+  Banknote,
+  Bike,
+  ClipboardList,
+  Store,
+  Truck,
+  Wallet,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,6 +29,7 @@ import { toAppError } from "@/lib/errors";
 import { restaurantsService } from "@/services/restaurants";
 import {
   financeService,
+  type DriverEarningsRow,
   type FinancialPeriod,
   type FinancialRestaurantRow,
 } from "@/services/finance";
@@ -58,6 +66,15 @@ export function FinanceModule() {
       }),
   });
 
+  // Per-driver earnings for the same date window. Driver earnings are
+  // global (no restaurant scoping) — a driver may have delivered for
+  // several restaurants in the same period — so we ignore the
+  // restaurantId filter here on purpose.
+  const driverEarningsQuery = useQuery({
+    queryKey: ["driver-earnings", from, to],
+    queryFn: () => financeService.getDriverEarnings({ from, to }),
+  });
+
   const periodColumns = useMemo<ColumnDef<FinancialPeriod>[]>(
     () => [
       { accessorKey: "period", header: groupBy === "day" ? "اليوم" : "الشهر" },
@@ -79,6 +96,33 @@ export function FinanceModule() {
       },
     ],
     [groupBy]
+  );
+
+  const driverColumns = useMemo<ColumnDef<DriverEarningsRow>[]>(
+    () => [
+      {
+        accessorKey: "full_name",
+        header: "الكابتن",
+        cell: ({ row }) => row.original.full_name ?? "—",
+      },
+      {
+        accessorKey: "phone",
+        header: "الهاتف",
+        cell: ({ row }) => row.original.phone ?? "—",
+      },
+      { accessorKey: "deliveries", header: "عدد التوصيلات" },
+      {
+        accessorKey: "earnings",
+        header: "إجمالي الأرباح",
+        cell: ({ row }) => egp(row.original.earnings),
+      },
+      {
+        accessorKey: "avg_per_delivery",
+        header: "متوسط الطلب",
+        cell: ({ row }) => egp(row.original.avg_per_delivery),
+      },
+    ],
+    []
   );
 
   const restaurantColumns = useMemo<ColumnDef<FinancialRestaurantRow>[]>(
@@ -234,6 +278,37 @@ export function FinanceModule() {
           <DataTable
             columns={restaurantColumns}
             data={reportQuery.data?.restaurants ?? []}
+            emptyTitle="لا توجد بيانات في هذه الفترة"
+          />
+
+          {/* Per-driver earnings (delivery-pool drivers only — owner
+              self-delivery counts are surfaced in the restaurant table
+              and the totals card above) */}
+          <h3 className="mb-2 mt-8 text-sm font-semibold text-muted-foreground">
+            أرباح الكباتن (التوصيل)
+          </h3>
+          {driverEarningsQuery.data?.totals ? (
+            <div className="mb-4 grid gap-4 md:grid-cols-3">
+              <StatCard
+                label="عدد الكباتن النشطين"
+                value={String(driverEarningsQuery.data.totals.drivers_count)}
+                icon={Bike}
+              />
+              <StatCard
+                label="إجمالي التوصيلات"
+                value={String(driverEarningsQuery.data.totals.total_deliveries)}
+                icon={Truck}
+              />
+              <StatCard
+                label="إجمالي أرباح الكباتن"
+                value={egp(driverEarningsQuery.data.totals.total_earnings)}
+                icon={Wallet}
+              />
+            </div>
+          ) : null}
+          <DataTable
+            columns={driverColumns}
+            data={driverEarningsQuery.data?.drivers ?? []}
             emptyTitle="لا توجد بيانات في هذه الفترة"
           />
         </>

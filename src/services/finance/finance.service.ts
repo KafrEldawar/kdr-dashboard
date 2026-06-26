@@ -49,6 +49,36 @@ export type UnclaimedOrder = {
   customer_name: string | null;
 };
 
+/// Per-driver delivery earnings totals over the requested window.
+/// The driver keeps the full `delivery_fee` on every delivered order
+/// they handled (no platform commission on delivery), so `earnings`
+/// here is a direct sum of `orders.delivery_fee`. Self-delivery orders
+/// (owner did the delivery) are excluded — those land in the
+/// `self_delivery_earnings` totals on the existing finance report.
+export type DriverEarningsTotals = {
+  drivers_count: number;
+  total_deliveries: number;
+  total_earnings: number;
+};
+
+export type DriverEarningsRow = {
+  driver_id: string;
+  full_name: string | null;
+  phone: string | null;
+  deliveries: number;
+  earnings: number;
+  avg_per_delivery: number;
+  first_delivery_at: string | null;
+  last_delivery_at: string | null;
+};
+
+export type DriverEarningsReport = {
+  from: string;
+  to: string;
+  totals: DriverEarningsTotals;
+  drivers: DriverEarningsRow[];
+};
+
 export const financeService = {
   async getReport(params: {
     from: string;
@@ -81,5 +111,25 @@ export const financeService = {
     if (error) throw error;
     if (data?.error) throw new Error(data.error);
     return (data ?? []) as UnclaimedOrder[];
+  },
+
+  async getDriverEarnings(params: {
+    from: string;
+    to: string;
+    driverId?: string;
+  }): Promise<DriverEarningsReport> {
+    const supabase = requireSupabase();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc(
+      "rpc_admin_get_driver_earnings_report",
+      {
+        p_from: params.from,
+        p_to: params.to,
+        p_driver_id: params.driverId ?? null,
+      }
+    );
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data as DriverEarningsReport;
   },
 };
