@@ -8,6 +8,7 @@ import {
   Gift,
   Heart,
   Home,
+  Inbox,
   MapPin,
   MessageSquare,
   Percent,
@@ -80,6 +81,7 @@ export const navItems: NavItem[] = [
   { titleKey: "nav.whatsapp", href: "/whatsapp", icon: Smartphone, group: "marketing" },
   { titleKey: "nav.reviews", href: "/reviews", icon: MessageSquare, group: "marketing" },
   { titleKey: "nav.favorites", href: "/favorites", icon: Heart, group: "marketing" },
+  { titleKey: "nav.supportInbox", href: "/support-inbox", icon: Inbox, group: "marketing" },
 
   { titleKey: "nav.queryLab", href: "/query-lab", icon: Database, group: "system" },
   { titleKey: "nav.seedData", href: "/seed", icon: Database, group: "system" },
