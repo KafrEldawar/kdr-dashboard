@@ -1,38 +1,33 @@
 /**
  * send-otp Edge Function
  *
- * POST { phone, purpose? }
- *   purpose: 'login' (default) | 'attach'
- *     'login'  — phone-first signup / primary-phone re-verify (no auth header
- *                needed; verify-otp will mint a session or attach to the
- *                logged-in user's primary phone).
- *     'attach' — logged-in user adding a verified ALTERNATE phone to their
- *                profile; verify-otp writes to profiles.alternate_phone
- *                without minting a session or touching auth.users.
+ * POST { phone }
  *
- *   The rate limit is shared per-phone regardless of purpose.
+ * Issues a 6-digit WhatsApp OTP. The verify-otp companion completes the
+ * flow (either attaches the phone to the logged-in user or mints a
+ * session via the synthetic-email scheme — see verify-otp/index.ts).
  *
- * Response (success):
- *   { ok: true, sends_remaining_in_window, sends_remaining_today,
- *     expires_in_seconds, cooldown_until? }
+ * Uniqueness contract (post-051): refuse to spend a WhatsApp send when
+ * the number clearly belongs to another account. Rules depend on
+ * whether the caller has a Bearer token:
+ *   • Bearer present (OAuth complete-profile or alt-phone attach)
+ *     → reject if the phone is anyone *else's* primary or alternate.
+ *   • No Bearer (phone-first signup/login)
+ *     → reject only if the phone is someone's ALTERNATE; being someone
+ *       else's primary just means verify-otp will sign them in.
  *
- * Response (denied):
- *   { ok: false, reason: 'cooldown'|'daily_cap'|'invalid_phone',
- *     cooldown_until?, sends_remaining_today? }
- *
- * Env vars:
- *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
- *   WA_SHARED_SECRET, WA_SERVICE_URL
+ * Env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+ *           WA_SHARED_SECRET, WA_SERVICE_URL
  */
 
-import { CORS, json }          from "../_shared/cors.ts";
-import { serviceClient }       from "../_shared/supabase.ts";
-import { normalizeE164 }       from "../_shared/phone.ts";
-import { checkAndIncrement }   from "../_shared/rateLimit.ts";
-import { generateCode, hashCode } from "../_shared/otp.ts";
-import { callRailway }         from "../_shared/hmac.ts";
+import { CORS, json }          from "./_shared/cors.ts";
+import { serviceClient, userIdFromAuthHeader } from "./_shared/supabase.ts";
+import { normalizeE164 }       from "./_shared/phone.ts";
+import { checkAndIncrement }   from "./_shared/rateLimit.ts";
+import { generateCode, hashCode } from "./_shared/otp.ts";
+import { callRailway }         from "./_shared/hmac.ts";
 
-const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const OTP_TTL_MS = 10 * 60 * 1000;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -45,12 +40,29 @@ Deno.serve(async (req) => {
       return json({ ok: false, reason: "invalid_phone" }, 400);
     }
 
-    // 'login' is the historical behaviour; 'attach' marks an OTP intended
-    // for the alternate-phone attachment flow. Anything unknown is treated
-    // as 'login' so old clients keep working.
-    const purpose = body?.purpose === "attach" ? "attach" : "login";
-
     const svc = serviceClient();
+
+    // Early refusal: don't burn a WhatsApp send (or the rate-limit
+    // budget) on a number that verify-otp is going to reject for
+    // belonging to another account.
+    const callerId = await userIdFromAuthHeader(req);
+    let clashQuery = svc
+      .from("profiles")
+      .select("id")
+      .or(
+        callerId
+          ? `phone.eq.${phone},alternate_phone.eq.${phone}`
+          : `alternate_phone.eq.${phone}`,
+      )
+      .limit(1);
+    if (callerId) {
+      clashQuery = clashQuery.neq("id", callerId);
+    }
+    const { data: clash } = await clashQuery.maybeSingle();
+    if (clash) {
+      return json({ ok: false, reason: "phone_in_use" }, 409);
+    }
+
     const decision = await checkAndIncrement(svc, phone);
     if (!decision.allowed) {
       return json({
@@ -68,7 +80,7 @@ Deno.serve(async (req) => {
     const { error: insertErr } = await svc.from("otp_codes").insert({
       phone,
       code_hash:    codeHash,
-      purpose,
+      purpose:      "login",
       expires_at:   expiresAt,
       max_attempts: 5,
     });
@@ -76,7 +88,6 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: insertErr.message }, 500);
     }
 
-    // Audit row first so we never lose track of an issued code.
     await svc.from("whatsapp_send_log").insert({
       phone, purpose: "otp", status: "queued",
     });

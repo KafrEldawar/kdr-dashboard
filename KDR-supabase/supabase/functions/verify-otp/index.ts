@@ -1,43 +1,25 @@
 /**
  * verify-otp Edge Function
  *
- * POST { phone, code, purpose? }
+ * To avoid Supabase forcing a paid SMS provider (Twilio/etc), we don't
+ * use the native phone auth at all. Instead we mint a synthetic email
+ * (`<digits>@phone.kdr.app`) per phone number, store the verified phone
+ * in profiles, and sign the user in via signInWithPassword({ email }).
+ * The end user never sees the email.
  *
- * Behaviour depends on the Authorization header and the optional purpose:
- *
- *   • purpose='attach' + Bearer present
- *     ─ verify code → set profiles.alternate_phone +
- *       alternate_phone_verified_at on the logged-in user
- *     ─ does NOT touch profiles.phone, auth.users, or mint a session
- *     ─ rejects if the phone is the caller's primary or already attached
- *       to another account (primary or alternate)
- *     ─ return { ok: true, mode: 'alt_attached' }
- *
- *   • purpose='login' (default) + Bearer present
- *     ─ verify code → set profiles.phone + phone_verified_at
- *     ─ return { ok: true, mode: 'attached' }
- *
- *   • purpose='login' + No Bearer  (phone-first signup or returning user)
- *     ─ verify code
- *     ─ if a Supabase auth.user with this phone exists, mint a session
- *       and set phone_verified_at on its profile
- *     ─ otherwise call admin.createUser({phone, phone_confirm:true}),
- *       wait for the handle_new_user trigger to write profiles, set
- *       phone_verified_at, mint a session
- *     ─ return { ok: true, mode: 'signed_in', session, needs_onboarding }
- *
- * Sessions are minted via the random-password trick: rotate a strong
- * random password on the auth.user, then call signInWithPassword.
- * The user never sees that password.
- *
- * Env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ * Uniqueness contract (post-051): a phone number can belong to at most
+ * one account, counting both `profiles.phone` and `profiles.alternate_phone`.
+ * The migration enforces this at the DB level via a UNIQUE partial index
+ * on `profiles.phone`. This function pre-checks the rule so the client
+ * gets a friendly `reason: 'phone_in_use'` instead of a 500 from the
+ * constraint violation.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { CORS, json }                from "../_shared/cors.ts";
-import { serviceClient, userIdFromAuthHeader } from "../_shared/supabase.ts";
-import { normalizeE164 }             from "../_shared/phone.ts";
-import { verifyCode }                from "../_shared/otp.ts";
+import { CORS, json }                from "./_shared/cors.ts";
+import { serviceClient, userIdFromAuthHeader } from "./_shared/supabase.ts";
+import { normalizeE164 }             from "./_shared/phone.ts";
+import { verifyCode }                from "./_shared/otp.ts";
 
 interface OtpRow {
   id: string;
@@ -48,6 +30,12 @@ interface OtpRow {
   consumed_at: string | null;
 }
 
+const SYNTHETIC_EMAIL_DOMAIN = "phone.kdr.app";
+
+function syntheticEmailFor(phone: string): string {
+  return `${phone.replace(/^\+/, "")}@${SYNTHETIC_EMAIL_DOMAIN}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST")    return json({ error: "Method not allowed" }, 405);
@@ -56,7 +44,6 @@ Deno.serve(async (req) => {
     const body  = await req.json().catch(() => ({}));
     const phone = normalizeE164(body?.phone);
     const code  = typeof body?.code === "string" ? body.code.trim() : "";
-    const purpose = body?.purpose === "attach" ? "attach" : "login";
 
     if (!phone)              return json({ ok: false, reason: "invalid_phone" }, 400);
     if (!/^\d{4,8}$/.test(code))
@@ -64,7 +51,6 @@ Deno.serve(async (req) => {
 
     const svc = serviceClient();
 
-    // 1) Fetch the latest unconsumed OTP for this phone.
     const { data: otp, error: otpErr } = await svc
       .from("otp_codes")
       .select("id, code_hash, attempts, max_attempts, expires_at, consumed_at")
@@ -86,8 +72,6 @@ Deno.serve(async (req) => {
       return json({ ok: false, reason: "too_many_attempts" }, 429);
     }
 
-    // 2) Compare. Always increment attempts (cheap + makes brute-force
-    //    bookkeeping correct even on success).
     const matched = await verifyCode(code, row.code_hash);
 
     await svc
@@ -106,25 +90,13 @@ Deno.serve(async (req) => {
       }, 401);
     }
 
-    // 3) Attached-mode branches (existing session).
+    // ── Attached-mode branch (existing session) ───────────────────
+    // OAuth users finish complete-profile then come through here to
+    // attach a primary phone. Refuse if the phone is already on
+    // another account (primary or alternate) — otherwise the unique
+    // index on profiles.phone (added in 051) would surface as a 500.
     const existingUserId = await userIdFromAuthHeader(req);
-
-    if (existingUserId && purpose === "attach") {
-      // Alt-phone attach. Write to the alternate_phone columns only —
-      // never touches the primary or auth.users.
-      const { data: me, error: meErr } = await svc
-        .from("profiles")
-        .select("phone")
-        .eq("id", existingUserId)
-        .maybeSingle();
-      if (meErr) return json({ ok: false, error: meErr.message }, 500);
-
-      if (me?.phone && me.phone === phone) {
-        return json({ ok: false, reason: "alt_equals_primary" }, 409);
-      }
-
-      // Uniqueness — the phone can't already be someone else's primary
-      // or alternate. Hits the unique indexes added by 043.
+    if (existingUserId) {
       const { data: clash } = await svc
         .from("profiles")
         .select("id")
@@ -136,106 +108,110 @@ Deno.serve(async (req) => {
         return json({ ok: false, reason: "phone_in_use" }, 409);
       }
 
-      const { error: upErr } = await svc
-        .from("profiles")
-        .update({
-          alternate_phone:             phone,
-          alternate_phone_verified_at: new Date().toISOString(),
-        })
-        .eq("id", existingUserId);
-      if (upErr) return json({ ok: false, error: upErr.message }, 500);
-
-      return json({ ok: true, mode: "alt_attached" });
-    }
-
-    if (existingUserId) {
       await svc
         .from("profiles")
-        .update({
-          phone,
-          phone_verified_at: new Date().toISOString(),
-        })
+        .update({ phone, phone_verified_at: new Date().toISOString() })
         .eq("id", existingUserId);
-
-      // Also keep auth.users.phone in sync so future flows see it.
-      await svc.auth.admin.updateUserById(existingUserId, { phone });
-
       return json({ ok: true, mode: "attached" });
     }
 
-    // 4) Signup / phone-first sign-in branch.
-    //    Look up an existing auth.user by phone.
-    const { data: byPhone, error: lookupErr } = await svc
-      .from("auth.users")
-      .select("id")
-      .eq("phone", phone.replace(/^\+/, ""))      // auth.users.phone stored sans '+'
-      .maybeSingle();
-    // If the direct table query is blocked by RLS in this project,
-    // fall back to listing via the admin API.
-    let userId: string | null = lookupErr ? null : (byPhone?.id ?? null);
+    // ── Signup / phone-first sign-in branch ──────────────────────
+    // Look up an existing auth.user by either the synthetic email or
+    // an existing profile with this phone.
+    const syntheticEmail = syntheticEmailFor(phone);
 
+    // 1) Try profiles.phone — covers existing users whose phone was
+    //    attached to a different (real) email.
+    const { data: profileMatch } = await svc
+      .from("profiles")
+      .select("id")
+      .eq("phone", phone)
+      .maybeSingle();
+    let userId: string | null = profileMatch?.id ?? null;
+    let userEmail: string | null = null;
+
+    // 2) If still not found, look up by the synthetic email.
     if (!userId) {
-      // Final fallback — paginate through admin.listUsers filtering by phone.
-      // For large user bases this would be heavy, but the typical case is
-      // either "row found above" or "user doesn't exist yet".
       const { data: list } = await svc.auth.admin.listUsers({ page: 1, perPage: 200 });
-      const m = list?.users?.find((u) =>
-        (u.phone ?? "").replace(/^\+/, "") === phone.replace(/^\+/, "")
-      );
-      userId = m?.id ?? null;
+      const m = list?.users?.find((u) => (u.email ?? "").toLowerCase() === syntheticEmail);
+      if (m) {
+        userId = m.id;
+        userEmail = m.email ?? null;
+      }
+    }
+
+    // 3) Last guard: if no existing user matched the primary phone or
+    //    the synthetic email, this would be a brand-new signup. Refuse
+    //    if the number is already on someone's profile as their
+    //    ALTERNATE phone — otherwise the new user's phone write would
+    //    clash with the alternate-phone uniqueness from 043 and leave
+    //    a half-created account.
+    if (!userId) {
+      const { data: altClash } = await svc
+        .from("profiles")
+        .select("id")
+        .eq("alternate_phone", phone)
+        .limit(1)
+        .maybeSingle();
+      if (altClash) {
+        return json({ ok: false, reason: "phone_in_use" }, 409);
+      }
     }
 
     let needsOnboarding = false;
     const randomPassword = strongRandomPassword();
 
     if (userId) {
-      // Existing user → rotate password, refresh phone_verified_at.
+      // Look up the user's actual email so we know what to sign in with.
+      if (!userEmail) {
+        const { data: u } = await svc.auth.admin.getUserById(userId);
+        userEmail = u?.user?.email ?? null;
+      }
+      // If for some reason the user has no email at all, give them the
+      // synthetic one so signInWithPassword works.
+      if (!userEmail) {
+        await svc.auth.admin.updateUserById(userId, { email: syntheticEmail, email_confirm: true });
+        userEmail = syntheticEmail;
+      }
       await svc.auth.admin.updateUserById(userId, { password: randomPassword });
       await svc
         .from("profiles")
         .update({ phone, phone_verified_at: new Date().toISOString() })
         .eq("id", userId);
     } else {
-      // New user — phone-only.
+      // Brand-new user.
       const { data: created, error: createErr } = await svc.auth.admin.createUser({
-        phone,
+        email:          syntheticEmail,
         password:       randomPassword,
-        phone_confirm:  true,
+        email_confirm:  true,
       });
       if (createErr || !created?.user) {
-        return json({
-          ok: false,
-          error: createErr?.message ?? "createUser failed",
-        }, 500);
+        return json({ ok: false, error: createErr?.message ?? "createUser failed" }, 500);
       }
       userId = created.user.id;
+      userEmail = syntheticEmail;
       needsOnboarding = true;
 
-      // The handle_new_user trigger writes a profiles row. Add the verified
-      // timestamp + phone (the trigger may not have phone columns mapped).
+      // The handle_new_user trigger writes a profiles row. Add the
+      // verified phone on top.
       await svc
         .from("profiles")
         .update({ phone, phone_verified_at: new Date().toISOString() })
         .eq("id", userId);
     }
 
-    // 5) Mint a session via signInWithPassword. We use a fresh client
-    //    with the anon key so the resulting session object includes the
-    //    refresh token, which the service-role client wouldn't issue.
+    // Mint a session via signInWithPassword on the (real or synthetic) email.
     const anonClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       { auth: { persistSession: false, autoRefreshToken: false } },
     );
     const { data: signin, error: signinErr } = await anonClient.auth.signInWithPassword({
-      phone,
+      email:    userEmail!,
       password: randomPassword,
     });
     if (signinErr || !signin?.session) {
-      return json({
-        ok: false,
-        error: signinErr?.message ?? "signInWithPassword failed",
-      }, 500);
+      return json({ ok: false, error: signinErr?.message ?? "signInWithPassword failed" }, 500);
     }
 
     return json({
@@ -251,7 +227,7 @@ Deno.serve(async (req) => {
       },
       user: {
         id:    signin.user?.id,
-        phone: signin.user?.phone,
+        phone,
         email: signin.user?.email,
       },
     });
@@ -263,7 +239,6 @@ Deno.serve(async (req) => {
 function strongRandomPassword(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  // base64url, length 43 — plenty of entropy, safe for any password rule.
   return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
