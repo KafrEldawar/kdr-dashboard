@@ -404,6 +404,33 @@ function StepBranches({
     form.reset(branchDefaults);
   }
 
+  /// The most common way for branches to silently disappear was users
+  /// filling the sub-form and clicking "التالي" without pressing the
+  /// "إضافة الفرع للقائمة" button first. On Next we auto-commit any
+  /// draft that already passes validation, and if there is dirty data
+  /// that doesn't validate we bail out and surface the errors instead
+  /// of dropping the branch on the floor.
+  async function handleNext() {
+    const values = form.getValues();
+    const isDirty =
+      form.formState.isDirty ||
+      Object.values(values).some((v) =>
+        Array.isArray(v) ? v.some(Boolean) : Boolean(v),
+      );
+    if (!isDirty) {
+      onNext();
+      return;
+    }
+    const ok = await form.trigger();
+    if (!ok) {
+      toast.error("أكمل بيانات الفرع أو امسحها قبل الانتقال للخطوة التالية");
+      return;
+    }
+    addBranch(form.getValues());
+    toast.success("تم حفظ الفرع تلقائياً");
+    onNext();
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
       <div>
@@ -489,7 +516,7 @@ function StepBranches({
         <Button type="button" variant="outline" onClick={onBack}>
           <ChevronRight className="h-4 w-4" /> السابق
         </Button>
-        <Button type="button" onClick={onNext}>
+        <Button type="button" onClick={handleNext}>
           التالي <ChevronLeft className="h-4 w-4" />
         </Button>
       </div>
@@ -999,8 +1026,13 @@ export function AddRestaurantWizard({ onSuccess, onCancel }: AddRestaurantWizard
           if (filteredPhones.length > 0) {
             await branchPhonesService.syncPhones(branchId, filteredPhones);
           }
-        } catch {
-          errors.push(`فرع: ${b.name_ar || b.address_ar}`);
+        } catch (branchErr) {
+          // Old code swallowed the error which made "branch didn't save"
+          // impossible to debug — surface the reason so the admin can
+          // fix the underlying issue (RLS, validation, network).
+          console.error("branch create failed", branchErr);
+          const reason = toAppError(branchErr).message;
+          errors.push(`فرع «${b.name_ar || b.address_ar}»: ${reason}`);
         }
       }
 

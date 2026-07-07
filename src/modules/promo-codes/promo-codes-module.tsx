@@ -319,7 +319,7 @@ export function PromoCodesModule() {
     <>
       <PageHeader
         title="أكواد الخصم"
-        description="إدارة أكواد الخصم (vouchers) للمطاعم."
+        description="إدارة أكواد الخصم (vouchers) للمطاعم. الخصم بيتخصم من عمولة المنصة الأول، ولو زاد عن قيمة العمولة الفرق بيتحمّله المطعم."
         action={
           <Button onClick={() => { createForm.reset(defaultValues); setAddOpen(true); }}>
             <Plus className="h-4 w-4" />

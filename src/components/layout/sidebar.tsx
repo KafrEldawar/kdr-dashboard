@@ -26,6 +26,19 @@ export function SidebarNav({
   const locale = useLocale();
   const toggle = useSidebarStore((s) => s.toggle);
 
+  // Only one entry is "active" per pathname — the one with the longest
+  // matching href. This stops `/settings` and `/settings/delivery` from
+  // both lighting up when the user is on the child route, without losing
+  // the "parent stays active on deeper sub-routes" behaviour when there
+  // is no child in nav-items.
+  const activeHref = navItems
+    .map((item) => item.href)
+    .filter((href) => {
+      if (href === "/") return pathname === "/";
+      return pathname === href || pathname.startsWith(href + "/");
+    })
+    .sort((a, b) => b.length - a.length)[0];
+
   return (
     <div className="flex h-full flex-col">
       {/* Brand */}
@@ -81,9 +94,7 @@ export function SidebarNav({
               <div className="space-y-1">
                 {items.map((item) => {
                   const Icon = item.icon;
-                  const active =
-                    pathname === item.href ||
-                    (item.href !== "/" && pathname.startsWith(item.href));
+                  const active = item.href === activeHref;
 
                   return (
                     <Link

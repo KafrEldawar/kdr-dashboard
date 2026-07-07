@@ -49,6 +49,9 @@ const schema = z.object({
   commission_percentage: z.coerce.number().min(0).max(100).optional(),
   estimated_delivery_time: z.coerce.number().min(1).optional(),
   accepts_online_orders: z.boolean().default(true).optional(),
+  // Admin-controlled per-restaurant permission — gates the "قبول
+  // وتوصيل بنفسي" button on the owner mobile app.
+  self_delivery_enabled: z.boolean().default(false).optional(),
   category_ids: z.array(z.string()),
 });
 
@@ -64,6 +67,7 @@ const defaultValues: RestaurantForm = {
   commission_percentage: 10,
   estimated_delivery_time: 30,
   accepts_online_orders: true,
+  self_delivery_enabled: false,
   category_ids: [],
 };
 
@@ -327,6 +331,22 @@ function RestaurantFormFields({
             className="h-4 w-4 rounded border-gray-300"
           />
           <Label>قبول الطلبات أونلاين</Label>
+        </div>
+        <div className="flex items-start gap-2 pt-6 sm:col-span-2">
+          <input
+            type="checkbox"
+            id="self-delivery-enabled"
+            {...form.register("self_delivery_enabled")}
+            className="mt-1 h-4 w-4 rounded border-gray-300"
+          />
+          <div className="min-w-0">
+            <Label htmlFor="self-delivery-enabled">
+              السماح للمطعم بالتوصيل بنفسه
+            </Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              لما تفعّلها، هيظهر للمطعم زر «قبول وتوصيل بنفسي» على تطبيق الأونر، والطلب مش هيروح لسائقي المنصة.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -772,6 +792,7 @@ export function RestaurantsModule() {
         commission_percentage: values.commission_percentage,
         estimated_delivery_time: values.estimated_delivery_time,
         accepts_online_orders: values.accepts_online_orders ?? true,
+        self_delivery_enabled: values.self_delivery_enabled ?? false,
       });
       await restaurantCategoriesService.syncCategories(id, values.category_ids);
     },
@@ -864,6 +885,7 @@ export function RestaurantsModule() {
                     commission_percentage: r.commission_percentage,
                     estimated_delivery_time: r.estimated_delivery_time,
                     accepts_online_orders: r.accepts_online_orders,
+                    self_delivery_enabled: r.self_delivery_enabled ?? false,
                     category_ids: [],   // populated by restaurantCategoriesQuery
                   });
                   setEditingRestaurant(r);

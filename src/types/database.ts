@@ -802,6 +802,7 @@ export type Database = {
           branch_lng: number | null
           claimed_at: string | null
           commission_amount: number
+          commission_gross: number
           commission_percentage: number
           contact_phone: string
           created_at: string
@@ -814,6 +815,8 @@ export type Database = {
           delivery_lat: number | null
           delivery_lng: number | null
           discount: number
+          discount_platform_share: number
+          discount_restaurant_share: number
           driver_id: string | null
           estimated_preparation_minutes: number | null
           id: string
@@ -841,6 +844,7 @@ export type Database = {
           branch_lng?: number | null
           claimed_at?: string | null
           commission_amount?: number
+          commission_gross?: number
           commission_percentage?: number
           contact_phone: string
           created_at?: string
@@ -853,6 +857,8 @@ export type Database = {
           delivery_lat?: number | null
           delivery_lng?: number | null
           discount?: number
+          discount_platform_share?: number
+          discount_restaurant_share?: number
           driver_id?: string | null
           estimated_preparation_minutes?: number | null
           id?: string
@@ -880,6 +886,7 @@ export type Database = {
           branch_lng?: number | null
           claimed_at?: string | null
           commission_amount?: number
+          commission_gross?: number
           commission_percentage?: number
           contact_phone?: string
           created_at?: string
@@ -892,6 +899,8 @@ export type Database = {
           delivery_lat?: number | null
           delivery_lng?: number | null
           discount?: number
+          discount_platform_share?: number
+          discount_restaurant_share?: number
           driver_id?: string | null
           estimated_preparation_minutes?: number | null
           id?: string
@@ -1158,6 +1167,7 @@ export type Database = {
           logo_url: string | null
           name_ar: string
           name_en: string
+          self_delivery_enabled: boolean
           updated_at: string
         }
         Insert: {
@@ -1174,6 +1184,7 @@ export type Database = {
           logo_url?: string | null
           name_ar: string
           name_en: string
+          self_delivery_enabled?: boolean
           updated_at?: string
         }
         Update: {
@@ -1190,6 +1201,7 @@ export type Database = {
           logo_url?: string | null
           name_ar?: string
           name_en?: string
+          self_delivery_enabled?: boolean
           updated_at?: string
         }
         Relationships: []

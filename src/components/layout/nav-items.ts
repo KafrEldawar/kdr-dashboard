@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Percent,
   Send,
+  Server,
   Settings,
   ShoppingCart,
   Smartphone,
@@ -83,6 +84,7 @@ export const navItems: NavItem[] = [
   { titleKey: "nav.favorites", href: "/favorites", icon: Heart, group: "marketing" },
   { titleKey: "nav.supportInbox", href: "/support-inbox", icon: Inbox, group: "marketing" },
 
+  { titleKey: "nav.status", href: "/status", icon: Server, group: "system" },
   { titleKey: "nav.queryLab", href: "/query-lab", icon: Database, group: "system" },
   { titleKey: "nav.seedData", href: "/seed", icon: Database, group: "system" },
   { titleKey: "nav.settings", href: "/settings", icon: Settings, group: "system" },

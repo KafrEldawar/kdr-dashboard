@@ -3,6 +3,22 @@ import { requireSupabase } from "@/lib/supabase/client";
 export type FinancialTotals = {
   orders_count: number;
   gross_sales: number;
+  /// Sum of `orders.subtotal` — total food value across the window,
+  /// before discounts and delivery fees.
+  subtotal: number;
+  /// Total voucher discount value shown to customers.
+  discount: number;
+  /// What the commission would have been without any voucher —
+  /// sum of `subtotal × commission_pct` snapshots (migration 053).
+  commission_gross: number;
+  /// How much of the discount the platform absorbed from its
+  /// commission on the owner's behalf.
+  discount_absorbed_by_platform: number;
+  /// How much the restaurants absorbed (only when discount exceeded
+  /// the gross commission on the order).
+  discount_borne_by_restaurant: number;
+  /// Net commission after absorbing vouchers — the platform's real
+  /// take on food revenue.
   platform_revenue: number;
   restaurant_revenue: number;
   /// Count of completed orders where the restaurant did the delivery
@@ -22,6 +38,9 @@ export type FinancialRestaurantRow = {
   current_commission_percentage: number;
   orders_count: number;
   gross_sales: number;
+  discount: number;
+  commission_gross: number;
+  discount_absorbed_by_platform: number;
   platform_revenue: number;
   restaurant_revenue: number;
   self_delivery_orders_count: number;

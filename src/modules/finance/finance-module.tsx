@@ -8,6 +8,7 @@ import {
   Bike,
   ClipboardList,
   Store,
+  Ticket,
   Truck,
   Wallet,
 } from "lucide-react";
@@ -85,9 +86,25 @@ export function FinanceModule() {
         cell: ({ row }) => egp(row.original.gross_sales),
       },
       {
+        accessorKey: "commission_gross",
+        header: "العمولة قبل الخصومات",
+        cell: ({ row }) => egp(row.original.commission_gross),
+      },
+      {
+        accessorKey: "discount_absorbed_by_platform",
+        header: "خصومات تحمّلتها المنصة",
+        cell: ({ row }) => (
+          <span className="text-destructive">
+            −{egp(row.original.discount_absorbed_by_platform)}
+          </span>
+        ),
+      },
+      {
         accessorKey: "platform_revenue",
-        header: "إيراد المنصة",
-        cell: ({ row }) => egp(row.original.platform_revenue),
+        header: "صافي إيراد المنصة",
+        cell: ({ row }) => (
+          <span className="font-semibold">{egp(row.original.platform_revenue)}</span>
+        ),
       },
       {
         accessorKey: "restaurant_revenue",
@@ -145,9 +162,25 @@ export function FinanceModule() {
         cell: ({ row }) => egp(row.original.gross_sales),
       },
       {
+        accessorKey: "commission_gross",
+        header: "العمولة قبل الخصومات",
+        cell: ({ row }) => egp(row.original.commission_gross),
+      },
+      {
+        accessorKey: "discount_absorbed_by_platform",
+        header: "تحمّلته المنصة",
+        cell: ({ row }) => (
+          <span className="text-destructive">
+            −{egp(row.original.discount_absorbed_by_platform)}
+          </span>
+        ),
+      },
+      {
         accessorKey: "platform_revenue",
-        header: "إيراد المنصة",
-        cell: ({ row }) => egp(row.original.platform_revenue),
+        header: "صافي إيراد المنصة",
+        cell: ({ row }) => (
+          <span className="font-semibold">{egp(row.original.platform_revenue)}</span>
+        ),
       },
       {
         accessorKey: "restaurant_revenue",
@@ -239,7 +272,7 @@ export function FinanceModule() {
               icon={Banknote}
             />
             <StatCard
-              label="إيراد المنصة (العمولات)"
+              label="صافي إيراد المنصة"
               value={egp(totals.platform_revenue)}
               icon={Wallet}
             />
@@ -249,6 +282,25 @@ export function FinanceModule() {
               icon={Store}
             />
           </div>
+          {totals.discount > 0 ? (
+            <div className="mb-6 grid gap-4 md:grid-cols-3">
+              <StatCard
+                label="إجمالي خصومات الفاوتشر"
+                value={egp(totals.discount)}
+                icon={Ticket}
+              />
+              <StatCard
+                label="تحمّلته المنصة (من العمولة)"
+                value={egp(totals.discount_absorbed_by_platform)}
+                icon={Wallet}
+              />
+              <StatCard
+                label="تحمّلته المطاعم (فوق العمولة)"
+                value={egp(totals.discount_borne_by_restaurant)}
+                icon={Store}
+              />
+            </div>
+          ) : null}
           {totals.self_delivery_orders_count > 0 ? (
             <div className="mb-6">
               <StatCard
