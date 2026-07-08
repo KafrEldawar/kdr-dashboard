@@ -66,12 +66,29 @@ async function probeWhatsapp(): Promise<ServiceReport> {
     }
     const body = await res.json().catch(() => ({}));
     const connected = body?.connected === true;
+    if (connected) {
+      return {
+        status: "ok",
+        latencyMs,
+        detail: `متصل${body?.phone ? ` — ${body.phone}` : ""}`,
+      };
+    }
+    // `paired` distinguishes the two disconnected states: false means
+    // the session creds are gone and nothing recovers without an
+    // operator scanning a QR (hard down); true means the session is
+    // valid and the sender is reconnecting on its own (degraded).
+    // Older sender builds don't send the field — keep the legacy label.
+    if (body?.paired === false) {
+      return {
+        status: "down",
+        latencyMs,
+        detail: "غير مرتبط — يحتاج مسح QR من صفحة واتساب",
+      };
+    }
     return {
-      status:    connected ? "ok" : "degraded",
+      status: "degraded",
       latencyMs,
-      detail:    connected
-        ? `متصل${body?.phone ? ` — ${body.phone}` : ""}`
-        : "بانتظار مسح QR",
+      detail: body?.paired === true ? "الجلسة سليمة — بيعيد الاتصال…" : "بانتظار مسح QR",
     };
   } catch (err) {
     return { status: "down", latencyMs: Date.now() - t0, error: (err as Error).message };
