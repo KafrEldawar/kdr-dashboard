@@ -31,7 +31,10 @@ type SessionStatus = {
   connected: boolean;
   phone?: string;
   qr?: string;
-  queue?: { size: number; pending: number };
+  // Mirrors queueStats() in kdr-whatsapp-sender-backend/src/queue.ts:
+  // pending is queued+running combined; dailyCount counts only sends
+  // that actually reached WhatsApp; warmup = ramp-up cap still active.
+  queue?: { pending: number; dailyCount?: number; dailyCap?: number; warmup?: boolean };
   error?: string;
 };
 
@@ -172,8 +175,16 @@ export function WhatsappConnectionModule() {
                 {status.queue ? (
                   <div>
                     <p className="text-sm text-muted-foreground">قائمة الإرسال</p>
+                    <p className="mt-1 text-sm">{status.queue.pending} في الانتظار</p>
+                  </div>
+                ) : null}
+
+                {status.queue?.dailyCap != null ? (
+                  <div>
+                    <p className="text-sm text-muted-foreground">الرصيد اليومي</p>
                     <p className="mt-1 text-sm">
-                      {status.queue.pending} قيد التنفيذ، {status.queue.size} في الانتظار
+                      {status.queue.dailyCount ?? 0} من {status.queue.dailyCap} رسالة
+                      {status.queue.warmup ? " (فترة تهيئة الرقم)" : ""}
                     </p>
                   </div>
                 ) : null}

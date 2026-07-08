@@ -16,6 +16,12 @@
  *     → reject only if the phone is someone's ALTERNATE; being someone
  *       else's primary just means verify-otp will sign them in.
  *
+ * Failure semantics (post-2026-07-08 outage): when the WhatsApp sender
+ * can't deliver, the per-phone rate-limit increment is refunded — a
+ * send that never happened must not eat the user's retry budget — and
+ * the response carries a structured `reason` so the app can explain
+ * the failure instead of showing a generic error.
+ *
  * Env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
  *           WA_SHARED_SECRET, WA_SERVICE_URL
  */
@@ -23,7 +29,7 @@
 import { CORS, json }          from "./_shared/cors.ts";
 import { serviceClient, userIdFromAuthHeader } from "./_shared/supabase.ts";
 import { normalizeE164 }       from "./_shared/phone.ts";
-import { checkAndIncrement }   from "./_shared/rateLimit.ts";
+import { checkAndIncrement, refundSend } from "./_shared/rateLimit.ts";
 import { generateCode, hashCode } from "./_shared/otp.ts";
 import { callRailway }         from "./_shared/hmac.ts";
 
@@ -92,7 +98,7 @@ Deno.serve(async (req) => {
       phone, purpose: "otp", status: "queued",
     });
 
-    const railway = await callRailway<{ ok: boolean; provider_message_id?: string }>(
+    const railway = await callRailway<{ ok: boolean; error?: string; provider_message_id?: string }>(
       "/send-otp",
       { phone, code, language: "ar" },
     );
@@ -106,9 +112,18 @@ Deno.serve(async (req) => {
     });
 
     if (!railway.ok) {
+      // The send never reached WhatsApp — give the user their rate-limit
+      // slot back so retrying after the outage isn't punished with a 429.
+      await refundSend(svc, phone);
+
+      const providerErr = railway.data?.error ?? "";
+      const reason =
+        providerErr === "daily_cap_exceeded" ? "service_daily_cap"
+        : providerErr === "not_connected"    ? "service_unavailable"
+        : "send_failed";
       return json({
         ok: false,
-        reason: "send_failed",
+        reason,
         error: railway.error ?? `HTTP ${railway.status}`,
       }, 502);
     }

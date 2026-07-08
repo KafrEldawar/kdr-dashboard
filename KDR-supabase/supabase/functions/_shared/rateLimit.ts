@@ -130,3 +130,31 @@ export async function checkAndIncrement(
     cooldownUntil:          row.cooldown_until ?? undefined,
   };
 }
+
+/**
+ * Undo one checkAndIncrement after a send that never reached WhatsApp
+ * (sender offline, daily cap on the sender side, transport error).
+ * The user shouldn't lose retry budget — or get locked in a cooldown —
+ * for a message that was never delivered.
+ */
+export async function refundSend(svc: SupabaseClient, phone: string): Promise<void> {
+  const { data } = await svc
+    .from("otp_rate_limits")
+    .select("*")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (!data) return;
+  const row = data as Row;
+
+  const sendsInWindow = Math.max(0, row.sends_in_window - 1);
+  const dailySends    = Math.max(0, row.daily_sends - 1);
+  // Lift the cooldown only if it was the refunded send that tripped it.
+  const cooldownUntil = sendsInWindow < MAX_SENDS_PER_WINDOW ? null : row.cooldown_until;
+
+  await svc.from("otp_rate_limits").update({
+    sends_in_window: sendsInWindow,
+    daily_sends:     dailySends,
+    cooldown_until:  cooldownUntil,
+    updated_at:      new Date().toISOString(),
+  }).eq("phone", phone);
+}
