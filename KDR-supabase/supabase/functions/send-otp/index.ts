@@ -22,8 +22,16 @@
  * the response carries a structured `reason` so the app can explain
  * the failure instead of showing a generic error.
  *
+ * Provider (2026-07-12 migration): sends go through the official
+ * WhatsApp Cloud API once WHATSAPP_ACCESS_TOKEN +
+ * WHATSAPP_PHONE_NUMBER_ID are set; until then the legacy
+ * Railway/Baileys sender keeps serving. Cutover = set the secrets;
+ * rollback = unset them. Remove the Railway path once the sender is
+ * decommissioned.
+ *
  * Env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
- *           WA_SHARED_SECRET, WA_SERVICE_URL
+ *           WHATSAPP_* (see _shared/whatsapp.ts),
+ *           legacy: WA_SHARED_SECRET, WA_SERVICE_URL
  */
 
 import { CORS, json }          from "./_shared/cors.ts";
@@ -32,6 +40,7 @@ import { normalizeE164 }       from "./_shared/phone.ts";
 import { checkAndIncrement, refundSend } from "./_shared/rateLimit.ts";
 import { generateCode, hashCode } from "./_shared/otp.ts";
 import { callRailway }         from "./_shared/hmac.ts";
+import { cloudApiConfigured, sendOtpTemplate } from "./_shared/whatsapp.ts";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 
@@ -98,33 +107,50 @@ Deno.serve(async (req) => {
       phone, purpose: "otp", status: "queued",
     });
 
-    const railway = await callRailway<{ ok: boolean; error?: string; provider_message_id?: string }>(
-      "/send-otp",
-      { phone, code, language: "ar" },
-    );
+    let sendOk: boolean;
+    let sendReason = "send_failed";
+    let sendError: string | null = null;
+    let providerMessageId: string | null = null;
+
+    if (cloudApiConfigured()) {
+      const result = await sendOtpTemplate(phone, code);
+      sendOk            = result.ok;
+      sendReason        = result.reason ?? "send_failed";
+      sendError         = result.error ?? null;
+      providerMessageId = result.providerMessageId;
+    } else {
+      const railway = await callRailway<{ ok: boolean; error?: string; provider_message_id?: string }>(
+        "/send-otp",
+        { phone, code, language: "ar" },
+      );
+      sendOk            = railway.ok;
+      sendError         = railway.ok ? null : (railway.error ?? `HTTP ${railway.status}`);
+      providerMessageId = railway.data?.provider_message_id ?? null;
+
+      const providerErr = railway.data?.error ?? "";
+      sendReason =
+        providerErr === "daily_cap_exceeded" ? "service_daily_cap"
+        : providerErr === "not_connected"    ? "service_unavailable"
+        : "send_failed";
+    }
 
     await svc.from("whatsapp_send_log").insert({
       phone,
       purpose: "otp",
-      status: railway.ok ? "sent" : "failed",
-      provider_message_id: railway.data?.provider_message_id ?? null,
-      error: railway.ok ? null : (railway.error ?? `HTTP ${railway.status}`),
+      status: sendOk ? "sent" : "failed",
+      provider_message_id: providerMessageId,
+      error: sendError,
     });
 
-    if (!railway.ok) {
+    if (!sendOk) {
       // The send never reached WhatsApp — give the user their rate-limit
       // slot back so retrying after the outage isn't punished with a 429.
       await refundSend(svc, phone);
 
-      const providerErr = railway.data?.error ?? "";
-      const reason =
-        providerErr === "daily_cap_exceeded" ? "service_daily_cap"
-        : providerErr === "not_connected"    ? "service_unavailable"
-        : "send_failed";
       return json({
         ok: false,
-        reason,
-        error: railway.error ?? `HTTP ${railway.status}`,
+        reason: sendReason,
+        error: sendError,
       }, 502);
     }
 
