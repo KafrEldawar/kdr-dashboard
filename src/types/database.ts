@@ -508,6 +508,8 @@ export type Database = {
       }
       menu_items: {
         Row: {
+          badge_label_ar: string | null
+          badge_type: string | null
           category_id: string | null
           created_at: string
           description_ar: string | null
@@ -524,6 +526,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          badge_label_ar?: string | null
+          badge_type?: string | null
           category_id?: string | null
           created_at?: string
           description_ar?: string | null
@@ -540,6 +544,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          badge_label_ar?: string | null
+          badge_type?: string | null
           category_id?: string | null
           created_at?: string
           description_ar?: string | null

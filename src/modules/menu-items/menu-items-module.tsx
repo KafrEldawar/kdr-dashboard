@@ -34,6 +34,12 @@ import { menuItemsService } from "@/services/menu";
 import { restaurantsService } from "@/services/restaurants";
 import { categoriesService } from "@/services/categories";
 import { useTranslations, useLocale } from "@/lib/i18n";
+import {
+  MENU_BADGE_PRESETS,
+  MENU_BADGE_META,
+  menuBadgeLabel,
+  menuBadgeClassName,
+} from "@/lib/menu-badges";
 import type { MenuItem } from "@/types/database";
 
 const schema = z.object({
@@ -45,6 +51,8 @@ const schema = z.object({
   description_en: z.string().optional(),
   image_url: z.string().optional(),
   price: z.coerce.number().min(0, "السعر مطلوب"),
+  badge_type: z.string().optional(),
+  badge_label_ar: z.string().optional(),
   is_available: z.boolean().default(true).optional(),
 });
 
@@ -59,6 +67,8 @@ const defaultValues: MenuItemForm = {
   description_en: "",
   image_url: "",
   price: 0,
+  badge_type: "",
+  badge_label_ar: "",
   is_available: true,
 };
 
@@ -156,6 +166,36 @@ function MenuItemFormFields({
         <FormField label="السعر (ج.م)" error={form.formState.errors.price?.message}>
           <Input {...form.register("price")} type="number" step="0.5" />
         </FormField>
+        <FormField label="بادج الصنف (اختياري)">
+          <Select
+            value={form.watch("badge_type") || "none"}
+            onValueChange={(v) => {
+              form.setValue("badge_type", v === "none" ? "" : v);
+              if (v !== "custom") form.setValue("badge_label_ar", "");
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="بدون بادج" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">بدون بادج</SelectItem>
+              {MENU_BADGE_PRESETS.map((b) => (
+                <SelectItem key={b} value={b}>
+                  {MENU_BADGE_META[b].label}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom">مخصص…</SelectItem>
+            </SelectContent>
+          </Select>
+        </FormField>
+        {form.watch("badge_type") === "custom" ? (
+          <FormField label="نص البادج المخصص">
+            <Input
+              {...form.register("badge_label_ar")}
+              placeholder="مثال: نباتي 100%"
+            />
+          </FormField>
+        ) : null}
         <div className="flex items-center gap-2 pt-6">
           <input type="checkbox" {...form.register("is_available")} className="h-4 w-4 rounded border-gray-300" />
           <Label>متاح</Label>
@@ -235,6 +275,9 @@ export function MenuItemsModule() {
         description_en: values.description_en || null,
         image_url: values.image_url || null,
         price: values.price,
+        badge_type: values.badge_type || null,
+        badge_label_ar:
+          values.badge_type === "custom" ? values.badge_label_ar || null : null,
         is_available: values.is_available ?? true,
       }),
     onSuccess: () => {
@@ -256,6 +299,9 @@ export function MenuItemsModule() {
         description_en: values.description_en || null,
         image_url: values.image_url || null,
         price: values.price,
+        badge_type: values.badge_type || null,
+        badge_label_ar:
+          values.badge_type === "custom" ? values.badge_label_ar || null : null,
         is_available: values.is_available ?? true,
       }),
     onSuccess: () => {
@@ -326,6 +372,26 @@ export function MenuItemsModule() {
         ),
       },
       {
+        id: "badge",
+        header: "البادج",
+        cell: ({ row }) => {
+          const label = menuBadgeLabel(
+            row.original.badge_type,
+            row.original.badge_label_ar
+          );
+          return label ? (
+            <Badge
+              variant="outline"
+              className={menuBadgeClassName(row.original.badge_type)}
+            >
+              {label}
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          );
+        },
+      },
+      {
         id: "actions",
         header: t("menuItems.field.actions"),
         cell: ({ row }) => {
@@ -346,6 +412,8 @@ export function MenuItemsModule() {
                     description_en: item.description_en || "",
                     image_url: item.image_url || "",
                     price: item.price,
+                    badge_type: item.badge_type || "",
+                    badge_label_ar: item.badge_label_ar || "",
                     is_available: item.is_available,
                   });
                 }}
