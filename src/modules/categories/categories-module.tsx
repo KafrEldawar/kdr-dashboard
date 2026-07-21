@@ -119,7 +119,13 @@ function CategoryFormFields({
   );
 }
 
-export function CategoriesModule() {
+export function CategoriesModule({
+  title,
+  description,
+}: {
+  title?: string;
+  description?: string;
+} = {}) {
   const queryClient = useQueryClient();
   const t = useTranslations();
   const locale = useLocale();
@@ -275,8 +281,8 @@ export function CategoriesModule() {
   return (
     <>
       <PageHeader
-        title={t("categories.title")}
-        description={t("categories.description")}
+        title={title ?? t("categories.title")}
+        description={description ?? t("categories.description")}
         action={
           <Button onClick={() => { createForm.reset(defaultValues); setAddOpen(true); }}>
             <Plus className="h-4 w-4" />
