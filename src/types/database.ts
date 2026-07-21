@@ -981,6 +981,7 @@ export type Database = {
           gender: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active: boolean
+          is_tester: boolean
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
@@ -994,6 +995,7 @@ export type Database = {
           gender?: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active?: boolean
+          is_tester?: boolean
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
@@ -1007,6 +1009,7 @@ export type Database = {
           gender?: Database["public"]["Enums"]["gender_type"] | null
           id?: string
           is_active?: boolean
+          is_tester?: boolean
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
@@ -1170,6 +1173,7 @@ export type Database = {
           id: string
           is_accepting_orders: boolean
           is_active: boolean
+          is_test: boolean
           logo_url: string | null
           name_ar: string
           name_en: string
@@ -1187,6 +1191,7 @@ export type Database = {
           id?: string
           is_accepting_orders?: boolean
           is_active?: boolean
+          is_test?: boolean
           logo_url?: string | null
           name_ar: string
           name_en: string
@@ -1204,6 +1209,7 @@ export type Database = {
           id?: string
           is_accepting_orders?: boolean
           is_active?: boolean
+          is_test?: boolean
           logo_url?: string | null
           name_ar?: string
           name_en?: string

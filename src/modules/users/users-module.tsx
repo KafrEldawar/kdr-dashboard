@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CheckCircle2, Edit, Eye, ShieldCheck, Trash2, UserPlus, XCircle } from "lucide-react";
+import { CheckCircle2, Edit, Eye, FlaskConical, ShieldCheck, Trash2, UserPlus, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -240,6 +240,15 @@ export function UsersModule() {
     onError: (error) => toast.error(toAppError(error).message),
   });
 
+  const toggleTesterMutation = useMutation({
+    mutationFn: (user: AdminUser) => adminService.setTester(user.id, !user.is_tester),
+    onSuccess: (_, user) => {
+      toast.success(user.is_tester ? "تم إلغاء صلاحية التجربة" : "تم منح صلاحية التجربة");
+      refresh();
+    },
+    onError: (error) => toast.error(toAppError(error).message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (user: AdminUser) => {
       const result = await deleteUserAction(user.id);
@@ -322,6 +331,21 @@ export function UsersModule() {
         ),
       },
       {
+        id: "is_tester",
+        header: "تجريبي",
+        cell: ({ row }) =>
+          row.original.is_tester ? (
+            <Badge
+              variant="outline"
+              className="border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+            >
+              مُختبِر
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
         accessorKey: "created_at",
         header: t("users.field.createdAt"),
         cell: ({ row }) => formatDate(row.original.created_at, locale),
@@ -363,6 +387,15 @@ export function UsersModule() {
                 <ShieldCheck className="h-4 w-4" />
                 {user.is_active ? "حظر" : "تفعيل"}
               </Button>
+              <Button
+                size="sm"
+                variant={user.is_tester ? "secondary" : "outline"}
+                title="السماح برؤية المطاعم التجريبية على التطبيق"
+                onClick={() => toggleTesterMutation.mutate(user)}
+              >
+                <FlaskConical className="h-4 w-4" />
+                {user.is_tester ? "إلغاء التجربة" : "مُختبِر"}
+              </Button>
               <Button size="sm" variant="destructive" onClick={() => setUserToDelete(user)}>
                 <Trash2 className="h-4 w-4" />
                 حذف
@@ -372,7 +405,7 @@ export function UsersModule() {
         },
       },
     ],
-    [t, locale, editForm, toggleActiveMutation]
+    [t, locale, editForm, toggleActiveMutation, toggleTesterMutation]
   );
 
   return (

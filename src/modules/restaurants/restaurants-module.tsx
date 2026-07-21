@@ -10,7 +10,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Edit, Eye, ToggleRight, Trash2, Plus, Star, MapPin,
   Clock, ShoppingBag, Building2, Tag, Images,
-  Gift, MessageSquare, ExternalLink, Utensils, X, CheckCircle2,
+  Gift, MessageSquare, ExternalLink, Utensils, X, CheckCircle2, FlaskConical,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +52,9 @@ const schema = z.object({
   // Admin-controlled per-restaurant permission — gates the "قبول
   // وتوصيل بنفسي" button on the owner mobile app.
   self_delivery_enabled: z.boolean().default(false).optional(),
+  // Test-only restaurant — visible only to tester/admin accounts on the
+  // live app (migration 058).
+  is_test: z.boolean().default(false).optional(),
   category_ids: z.array(z.string()),
 });
 
@@ -68,6 +71,7 @@ const defaultValues: RestaurantForm = {
   estimated_delivery_time: 30,
   accepts_online_orders: true,
   self_delivery_enabled: false,
+  is_test: false,
   category_ids: [],
 };
 
@@ -331,6 +335,22 @@ function RestaurantFormFields({
             className="h-4 w-4 rounded border-gray-300"
           />
           <Label>قبول الطلبات أونلاين</Label>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40 sm:col-span-2">
+          <input
+            type="checkbox"
+            id="is-test-restaurant"
+            {...form.register("is_test")}
+            className="mt-1 h-4 w-4 rounded border-amber-400"
+          />
+          <div className="min-w-0">
+            <Label htmlFor="is-test-restaurant">🧪 مطعم تجريبي (Test)</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              لما تفعّلها، المطعم يظهر فقط للحسابات المعلَّمة كـ«مُختبِر» (وللأدمن) على
+              التطبيق — تقدر تشغّله أونلاين وتعمل كل التيست كيسز من غير ما أي مستخدم
+              عادي يشوفه. علّم حسابك كـ«مُختبِر» من صفحة المستخدمين.
+            </p>
+          </div>
         </div>
         <div className="flex items-start gap-2 pt-6 sm:col-span-2">
           <input
@@ -793,6 +813,7 @@ export function RestaurantsModule() {
         estimated_delivery_time: values.estimated_delivery_time,
         accepts_online_orders: values.accepts_online_orders ?? true,
         self_delivery_enabled: values.self_delivery_enabled ?? false,
+        is_test: values.is_test ?? false,
       });
       await restaurantCategoriesService.syncCategories(id, values.category_ids);
     },
@@ -818,6 +839,16 @@ export function RestaurantsModule() {
     mutationFn: (r: Restaurant) =>
       restaurantsService.update(r.id, { is_active: !r.is_active }),
     onSuccess: () => { toast.success(t("restaurants.updatedSuccess")); refresh(); },
+    onError: (error) => toast.error(toAppError(error).message),
+  });
+
+  const toggleTestMutation = useMutation({
+    mutationFn: (r: Restaurant) =>
+      restaurantsService.update(r.id, { is_test: !r.is_test }),
+    onSuccess: (_, r) => {
+      toast.success(r.is_test ? "المطعم رجع عام لكل الناس" : "المطعم بقى تجريبي (للمُختبِرين فقط)");
+      refresh();
+    },
     onError: (error) => toast.error(toAppError(error).message),
   });
 
@@ -856,6 +887,21 @@ export function RestaurantsModule() {
         ),
       },
       {
+        id: "is_test",
+        header: "الظهور",
+        cell: ({ row }) =>
+          row.original.is_test ? (
+            <Badge
+              variant="outline"
+              className="border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+            >
+              🧪 تجريبي
+            </Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">عام</span>
+          ),
+      },
+      {
         accessorKey: "created_at",
         header: t("restaurants.field.createdAt"),
         cell: ({ row }) => formatDate(row.original.created_at, locale),
@@ -886,6 +932,7 @@ export function RestaurantsModule() {
                     estimated_delivery_time: r.estimated_delivery_time,
                     accepts_online_orders: r.accepts_online_orders,
                     self_delivery_enabled: r.self_delivery_enabled ?? false,
+                    is_test: r.is_test ?? false,
                     category_ids: [],   // populated by restaurantCategoriesQuery
                   });
                   setEditingRestaurant(r);
@@ -897,6 +944,14 @@ export function RestaurantsModule() {
               <Button size="sm" variant="secondary" onClick={() => toggleActiveMutation.mutate(r)}>
                 <ToggleRight className="h-4 w-4" />
               </Button>
+              <Button
+                size="sm"
+                variant={r.is_test ? "secondary" : "outline"}
+                title={r.is_test ? "رجّع المطعم عام لكل الناس" : "خلّي المطعم تجريبي (للمُختبِرين فقط)"}
+                onClick={() => toggleTestMutation.mutate(r)}
+              >
+                <FlaskConical className="h-4 w-4" />
+              </Button>
               <Button size="sm" variant="destructive" onClick={() => setDeletingRestaurant(r)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -905,7 +960,7 @@ export function RestaurantsModule() {
         },
       },
     ],
-    [t, locale, editForm, toggleActiveMutation]
+    [t, locale, editForm, toggleActiveMutation, toggleTestMutation]
   );
 
   return (

@@ -26,6 +26,7 @@ export type AdminUser = {
   created_at: string;
   phone_verified_at: string | null;
   whatsapp_opt_in: boolean;
+  is_tester: boolean;
   restaurant: { id: string; name_ar: string; name_en: string } | null;
 };
 
@@ -95,6 +96,16 @@ export const adminService = {
       p_full_name: params.fullName ?? null,
       p_phone: params.phone ?? null,
       p_whatsapp_opt_in: params.whatsappOptIn ?? null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  /** Flip an account's tester flag (lets it see test-only restaurants). */
+  async setTester(userId: string, isTester: boolean) {
+    const { data, error } = await rpc("rpc_admin_set_tester", {
+      p_user_id: userId,
+      p_is_tester: isTester,
     });
     if (error) throw error;
     return data;
