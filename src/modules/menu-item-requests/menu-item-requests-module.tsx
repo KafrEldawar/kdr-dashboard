@@ -22,6 +22,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { toAppError } from "@/lib/errors";
+import { menuBadgeLabel } from "@/lib/menu-badges";
 import {
   menuItemRequestsService,
   type MenuItemRequest,
@@ -70,6 +71,13 @@ function ReviewDialog({ request, open, onClose, onConfirm, isPending }: ReviewDi
   const proposedPrice = request.proposed_data?.price
     ? `${request.proposed_data.price} ج.م`
     : "—";
+  const proposedBadge = menuBadgeLabel(
+    request.proposed_data?.badge_type as string | undefined,
+    request.proposed_data?.badge_label_ar as string | undefined
+  );
+  const proposedCustomCategory =
+    (request.proposed_data?.custom_category_ar as string | undefined)?.trim() ||
+    null;
 
   return (
     <Dialog.Root open={open} onOpenChange={(o: boolean) => !o && onClose()}>
@@ -99,6 +107,21 @@ function ReviewDialog({ request, open, onClose, onConfirm, isPending }: ReviewDi
               <p>
                 <span className="font-medium">السعر المقترح:</span> {proposedPrice}
               </p>
+              {proposedBadge && (
+                <p>
+                  <span className="font-medium">البادج المقترح:</span>{" "}
+                  {proposedBadge}
+                </p>
+              )}
+              {proposedCustomCategory && (
+                <p>
+                  <span className="font-medium">تصنيف جديد مقترح:</span>{" "}
+                  {proposedCustomCategory}{" "}
+                  <span className="text-muted-foreground">
+                    (سيُضاف لقائمة التصنيفات عند القبول)
+                  </span>
+                </p>
+              )}
               {request.current_item && (
                 <p className="text-muted-foreground">
                   الصنف الحالي: {request.current_item.name_ar} (
