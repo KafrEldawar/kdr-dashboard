@@ -25,8 +25,32 @@ import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { adminService } from "@/services/admin";
 import { categoriesService } from "@/services/categories";
+import { menuCategoriesService } from "@/services/menu";
 import { useTranslations, useLocale } from "@/lib/i18n";
 import type { Category } from "@/types/database";
+
+// Two independent taxonomies share this UI shell:
+//   • "restaurant" → `categories` table via categoriesService + rpc_admin_manage_category
+//   • "menu"       → `menu_categories` table via menuCategoriesService + rpc_admin_manage_menu_category
+// Pick the binding at the top of the module; everything else is
+// generic. Keeps the two admin surfaces visually consistent while
+// making it impossible for a write in one to leak into the other.
+export type CategoriesKind = "restaurant" | "menu";
+
+const KIND_BINDINGS = {
+  restaurant: {
+    service: categoriesService,
+    manage: (params: Parameters<typeof adminService.manageCategory>[0]) =>
+      adminService.manageCategory(params),
+    queryKey: ["categories"] as const,
+  },
+  menu: {
+    service: menuCategoriesService,
+    manage: (params: Parameters<typeof adminService.manageMenuCategory>[0]) =>
+      adminService.manageMenuCategory(params),
+    queryKey: ["menu-categories"] as const,
+  },
+} as const;
 
 const schema = z.object({
   name_ar: z.string().min(2, "اسم التصنيف بالعربية مطلوب"),
@@ -122,13 +146,17 @@ function CategoryFormFields({
 export function CategoriesModule({
   title,
   description,
+  kind = "restaurant",
 }: {
   title?: string;
   description?: string;
+  kind?: CategoriesKind;
 } = {}) {
   const queryClient = useQueryClient();
   const t = useTranslations();
   const locale = useLocale();
+
+  const binding = KIND_BINDINGS[kind];
 
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -137,18 +165,18 @@ export function CategoriesModule({
   const debouncedSearch = useDebouncedValue(search);
 
   const categoriesQuery = useQuery({
-    queryKey: ["categories", debouncedSearch],
-    queryFn: () => categoriesService.getAll({ search: debouncedSearch, pageSize: 50 }),
+    queryKey: [...binding.queryKey, debouncedSearch],
+    queryFn: () => binding.service.getAll({ search: debouncedSearch, pageSize: 50 }),
   });
 
   const createForm = useForm<CategoryForm>({ resolver: zodResolver(schema), defaultValues });
   const editForm = useForm<CategoryForm>({ resolver: zodResolver(schema), defaultValues });
 
-  const refresh = () => void queryClient.invalidateQueries({ queryKey: ["categories"] });
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: binding.queryKey });
 
   const createMutation = useMutation({
     mutationFn: (values: CategoryForm) =>
-      adminService.manageCategory({
+      binding.manage({
         action: "create",
         nameAr: values.name_ar,
         nameEn: values.name_en,
@@ -167,7 +195,7 @@ export function CategoriesModule({
 
   const updateMutation = useMutation({
     mutationFn: ({ id, values }: { id: string; values: CategoryForm }) =>
-      adminService.manageCategory({
+      binding.manage({
         action: "update",
         id,
         nameAr: values.name_ar,
@@ -186,7 +214,7 @@ export function CategoriesModule({
 
   const deleteMutation = useMutation({
     mutationFn: (c: Category) =>
-      adminService.manageCategory({ action: "delete", id: c.id }),
+      binding.manage({ action: "delete", id: c.id }),
     onSuccess: () => {
       toast.success(t("categories.deletedSuccess"));
       setDeletingCategory(null);
@@ -197,7 +225,7 @@ export function CategoriesModule({
 
   const toggleMutation = useMutation({
     mutationFn: (c: Category) =>
-      adminService.manageCategory({ action: "update", id: c.id, isActive: !c.is_active }),
+      binding.manage({ action: "update", id: c.id, isActive: !c.is_active }),
     onSuccess: () => { toast.success(t("categories.updatedSuccess")); refresh(); },
     onError: (error) => toast.error(toAppError(error).message),
   });

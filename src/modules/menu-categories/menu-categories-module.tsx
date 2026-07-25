@@ -2,17 +2,17 @@
 
 import { CategoriesModule } from "@/modules/categories/categories-module";
 
-// Menu-item categories ARE the shared global `categories` in the current
-// schema: every menu item links to `categories`, and an owner's typed
-// custom category is promoted into this same list on approval
-// (migration 057). So this page is the full category manager, just
-// framed as "menu categories" — managing a category here or on
-// /categories affects the same data.
+// Menu-item categories are their OWN admin-managed taxonomy since
+// migration 059 — no longer a shim over `categories` (which now
+// only holds restaurant tags). Kept on the same UI shell so the
+// two admin surfaces feel identical, but every write here goes to
+// `menu_categories` via rpc_admin_manage_menu_category.
 export function MenuCategoriesModule() {
   return (
     <CategoriesModule
+      kind="menu"
       title="تصنيفات المنيو"
-      description="التصنيفات اللي بتظهر كأقسام في منيو المطاعم. أضِف/عدّل/فعّل أو أوقف تصنيف — دي نفس التصنيفات العامة اللي بيختار منها أصحاب المطاعم."
+      description="التصنيفات اللي بتظهر كأقسام جوة منيو المطاعم. مستقلة تماماً عن تصنيفات المطاعم اللي بتظهر ك chips في الهوم."
     />
   );
 }

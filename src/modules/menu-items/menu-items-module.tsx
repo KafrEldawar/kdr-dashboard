@@ -32,7 +32,9 @@ import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { menuItemsService } from "@/services/menu";
 import { restaurantsService } from "@/services/restaurants";
-import { categoriesService } from "@/services/categories";
+// Menu-item category picker binds to the menu-categories taxonomy
+// (migration 059), not to the restaurant-tag `categories` list.
+import { menuCategoriesService } from "@/services/menu";
 import { useTranslations, useLocale } from "@/lib/i18n";
 import {
   MENU_BADGE_PRESETS,
@@ -242,8 +244,8 @@ export function MenuItemsModule() {
   });
 
   const categoriesQuery = useQuery({
-    queryKey: ["categories-list"],
-    queryFn: () => categoriesService.getAll({ pageSize: 100 }),
+    queryKey: ["menu-categories-list"],
+    queryFn: () => menuCategoriesService.getAll({ pageSize: 100 }),
   });
 
   const restaurants = restaurantsQuery.data?.data ?? [];

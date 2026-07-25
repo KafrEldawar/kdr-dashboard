@@ -10,7 +10,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Edit, Eye, ToggleRight, Trash2, Plus, Star, MapPin,
   Clock, ShoppingBag, Building2, Tag, Images,
-  Gift, MessageSquare, ExternalLink, Utensils, X, CheckCircle2, FlaskConical,
+  Gift, MessageSquare, ExternalLink, Utensils, X, CheckCircle2, FlaskConical, ArrowDownUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +38,7 @@ import { offersService } from "@/services/offers";
 import { requireSupabase } from "@/lib/supabase/client";
 import { useTranslations, useLocale } from "@/lib/i18n";
 import type { Branch, Category, MenuItem, Offer, Restaurant, RestaurantGallery } from "@/types/database";
+import { RestaurantsReorderDialog } from "./restaurants-reorder-dialog";
 
 const schema = z.object({
   name_ar: z.string().min(2, "اسم المطعم بالعربية مطلوب"),
@@ -768,11 +769,26 @@ export function RestaurantsModule() {
   const [viewingRestaurant, setViewingRestaurant] = useState<Restaurant | null>(null);
   const [editingRestaurant, setEditingRestaurant] = useState<Restaurant | null>(null);
   const [deletingRestaurant, setDeletingRestaurant] = useState<Restaurant | null>(null);
+  const [reorderOpen, setReorderOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(search);
 
   const restaurantsQuery = useQuery({
     queryKey: ["restaurants", debouncedSearch],
     queryFn: () => restaurantsService.getAll({ search: debouncedSearch, pageSize: 50 }),
+  });
+
+  // Reorder dialog needs the full list unfiltered so the admin sees
+  // (and re-ranks) every restaurant at once — the main table might
+  // be filtered by a search when they click the button.
+  const allRestaurantsQuery = useQuery({
+    queryKey: ["restaurants-all-for-reorder"],
+    queryFn: () =>
+      restaurantsService.getAll({
+        pageSize: 500,
+        column: "display_order",
+        direction: "asc",
+      }),
+    enabled: reorderOpen,
   });
 
   const allCategoriesQuery = useQuery({
@@ -970,10 +986,16 @@ export function RestaurantsModule() {
         title={t("restaurants.title")}
         description={t("restaurants.description")}
         action={
-          <Button onClick={() => router.push("/restaurants/new")}>
-            <Plus className="h-4 w-4" />
-            {t("restaurants.createNew")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setReorderOpen(true)}>
+              <ArrowDownUp className="h-4 w-4" />
+              ترتيب المطاعم
+            </Button>
+            <Button onClick={() => router.push("/restaurants/new")}>
+              <Plus className="h-4 w-4" />
+              {t("restaurants.createNew")}
+            </Button>
+          </div>
         }
       />
 
@@ -1039,6 +1061,16 @@ export function RestaurantsModule() {
         confirmLabel={t("common.delete")}
         onOpenChange={(open) => !open && setDeletingRestaurant(null)}
         onConfirm={() => deletingRestaurant && deleteMutation.mutate(deletingRestaurant)}
+      />
+
+      <RestaurantsReorderDialog
+        open={reorderOpen}
+        onOpenChange={setReorderOpen}
+        restaurants={allRestaurantsQuery.data?.data ?? []}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ["restaurants"] });
+          queryClient.invalidateQueries({ queryKey: ["restaurants-all-for-reorder"] });
+        }}
       />
     </>
   );
