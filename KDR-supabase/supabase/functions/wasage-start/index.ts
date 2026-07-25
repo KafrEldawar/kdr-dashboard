@@ -27,7 +27,14 @@ import { createWasageVerification, wasageConfigured } from "../_shared/wasage.ts
 
 const TTL_MS = 10 * 60 * 1000;
 
-const DEFAULT_MESSAGE = "تم تأكيد رقمك بنجاح في تطبيق كفر الدوار للمطاعم ✅";
+// Wasage sends this back to the sender on their WhatsApp *regardless* of
+// whether the number matches what the user typed in the app — the
+// mismatch check happens in our webhook after the fact. So the copy has
+// to stay honest for both outcomes: it acknowledges receipt, then punts
+// the user back to the app which shows either "verified — enjoy" or
+// the "wrong number, retry" error inline.
+const DEFAULT_MESSAGE =
+  "شكراً لك ✅ استلمنا رسالتك. ارجع لتطبيق مطاعم كفر الدوار الآن عشان تكمل التحقق وتقدر تطلب بكل حرية 🍽️";
 
 function newReference(): string {
   const bytes = new Uint8Array(32);
