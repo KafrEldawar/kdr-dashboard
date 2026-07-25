@@ -151,6 +151,40 @@ export const adminService = {
     return data;
   },
 
+  async manageMenuCategory(params: {
+    action: "create" | "update" | "delete";
+    id?: string;
+    nameAr?: string;
+    nameEn?: string;
+    imageUrl?: string;
+    sortOrder?: number;
+    isActive?: boolean;
+  }) {
+    const { data, error } = await rpc("rpc_admin_manage_menu_category", {
+      p_action: params.action,
+      p_id: params.id ?? null,
+      p_name_ar: params.nameAr ?? null,
+      p_name_en: params.nameEn ?? null,
+      p_image_url: params.imageUrl ?? null,
+      p_sort_order: params.sortOrder ?? null,
+      p_is_active: params.isActive ?? null,
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  // Batch-writes display_order for every restaurant in the supplied
+  // order. The dashboard sort screen sends the full ordered id list;
+  // ranks are reassigned server-side from 1..N so client + DB stay
+  // in sync without gap management.
+  async reorderRestaurants(orderedIds: string[]) {
+    const { data, error } = await rpc("rpc_admin_reorder_restaurants", {
+      p_ordered_ids: orderedIds,
+    });
+    if (error) throw error;
+    return data;
+  },
+
   async createRestaurant(params: {
     nameAr: string;
     nameEn: string;

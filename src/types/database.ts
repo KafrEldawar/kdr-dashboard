@@ -323,6 +323,39 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_categories: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string | null
+          is_active: boolean
+          name_ar: string
+          name_en: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name_ar: string
+          name_en: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name_ar?: string
+          name_en?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       device_tokens: {
         Row: {
           created_at: string
@@ -520,7 +553,6 @@ export type Database = {
           name_ar: string
           name_en: string
           price: number
-          restaurant_category_id: string | null
           restaurant_id: string
           sort_order: number
           updated_at: string
@@ -538,7 +570,6 @@ export type Database = {
           name_ar: string
           name_en: string
           price: number
-          restaurant_category_id?: string | null
           restaurant_id: string
           sort_order?: number
           updated_at?: string
@@ -556,7 +587,6 @@ export type Database = {
           name_ar?: string
           name_en?: string
           price?: number
-          restaurant_category_id?: string | null
           restaurant_id?: string
           sort_order?: number
           updated_at?: string
@@ -566,14 +596,7 @@ export type Database = {
             foreignKeyName: "menu_items_category_id_fkey"
             columns: ["category_id"]
             isOneToOne: false
-            referencedRelation: "categories"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "menu_items_restaurant_category_id_fkey"
-            columns: ["restaurant_category_id"]
-            isOneToOne: false
-            referencedRelation: "restaurant_menu_categories"
+            referencedRelation: "menu_categories"
             referencedColumns: ["id"]
           },
           {
@@ -1084,47 +1107,6 @@ export type Database = {
           },
         ]
       }
-      restaurant_menu_categories: {
-        Row: {
-          created_at: string | null
-          id: string
-          is_active: boolean
-          name_ar: string
-          name_en: string
-          restaurant_id: string
-          sort_order: number
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          is_active?: boolean
-          name_ar: string
-          name_en?: string
-          restaurant_id: string
-          sort_order?: number
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          is_active?: boolean
-          name_ar?: string
-          name_en?: string
-          restaurant_id?: string
-          sort_order?: number
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "restaurant_menu_categories_restaurant_id_fkey"
-            columns: ["restaurant_id"]
-            isOneToOne: false
-            referencedRelation: "restaurants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       restaurant_owners: {
         Row: {
           created_at: string
@@ -1169,6 +1151,7 @@ export type Database = {
           created_at: string
           description_ar: string | null
           description_en: string | null
+          display_order: number | null
           estimated_delivery_time: number
           id: string
           is_accepting_orders: boolean
@@ -1187,6 +1170,7 @@ export type Database = {
           created_at?: string
           description_ar?: string | null
           description_en?: string | null
+          display_order?: number | null
           estimated_delivery_time?: number
           id?: string
           is_accepting_orders?: boolean
@@ -1205,6 +1189,7 @@ export type Database = {
           created_at?: string
           description_ar?: string | null
           description_en?: string | null
+          display_order?: number | null
           estimated_delivery_time?: number
           id?: string
           is_accepting_orders?: boolean
@@ -1572,6 +1557,23 @@ export type Database = {
         }
         Returns: Json
       }
+      rpc_admin_manage_menu_category: {
+        Args: {
+          p_action: string
+          p_id?: string
+          p_image_url?: string
+          p_is_active?: boolean
+          p_name_ar?: string
+          p_name_en?: string
+          p_sort_order?: number
+        }
+        Returns: Json
+      }
+      rpc_admin_reorder_restaurants: {
+        Args: { p_ordered_ids: string[] }
+        Returns: Json
+      }
+      rpc_get_menu_categories: { Args: never; Returns: Json }
       rpc_admin_manage_menu_option: {
         Args: {
           p_action: string
@@ -1706,7 +1708,6 @@ export type Database = {
       }
       rpc_owner_delete_menu_item: { Args: { p_item_id: string }; Returns: Json }
       rpc_owner_get_dashboard: { Args: never; Returns: Json }
-      rpc_owner_get_menu_categories: { Args: never; Returns: Json }
       rpc_owner_get_menu_items: { Args: never; Returns: Json }
       rpc_owner_get_orders: {
         Args: { p_page?: number; p_page_size?: number; p_status?: string }
@@ -1731,17 +1732,6 @@ export type Database = {
           p_description?: string
           p_id?: string
           p_image_url?: string
-          p_sort_order?: number
-        }
-        Returns: Json
-      }
-      rpc_owner_manage_menu_category: {
-        Args: {
-          p_action: string
-          p_id?: string
-          p_is_active?: boolean
-          p_name_ar?: string
-          p_name_en?: string
           p_sort_order?: number
         }
         Returns: Json
