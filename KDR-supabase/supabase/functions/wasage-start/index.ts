@@ -23,7 +23,7 @@ import { CORS, json }                            from "../_shared/cors.ts";
 import { serviceClient, userIdFromAuthHeader }   from "../_shared/supabase.ts";
 import { normalizeE164 }                         from "../_shared/phone.ts";
 import { checkAndIncrement, refundSend }         from "../_shared/rateLimit.ts";
-import { createWasageVerification, wasageConfigured } from "../_shared/wasage.ts";
+import { createWasageVerification, wasageConfigured, buildCustomWasageClickable } from "../_shared/wasage.ts";
 
 const TTL_MS = 10 * 60 * 1000;
 
@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
     return json({
       ok: true,
       reference,
-      clickable_url:             result.clickable,
+      clickable_url:             buildCustomWasageClickable(result.clickable, result.otp),
       qr_url:                    result.qr,
       expires_in_seconds:        Math.floor(TTL_MS / 1000),
       sends_remaining_in_window: decision.sendsRemainingInWindow,
