@@ -1,5 +1,6 @@
 import {
   Activity,
+  Bike,
   BarChart3,
   Boxes,
   Clock,
@@ -74,6 +75,7 @@ export const navItems: NavItem[] = [
 
   { titleKey: "nav.orders", href: "/orders", icon: ClipboardList, group: "operations" },
   { titleKey: "nav.orderTracking", href: "/order-tracking", icon: Truck, group: "operations" },
+  { titleKey: "nav.deliveryProviders", href: "/delivery-providers", icon: Bike, group: "operations" },
   { titleKey: "nav.cart", href: "/cart", icon: ShoppingCart, group: "operations" },
   { titleKey: "nav.commissions", href: "/commissions", icon: CreditCard, group: "operations" },
   { titleKey: "nav.workingHours", href: "/working-hours", icon: Clock, group: "operations" },
