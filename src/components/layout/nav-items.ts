@@ -1,4 +1,5 @@
 import {
+  Activity,
   BarChart3,
   Boxes,
   Clock,
@@ -60,6 +61,7 @@ export const navGroupOrder: NavGroup[] = [
 export const navItems: NavItem[] = [
   { titleKey: "nav.home", href: "/", icon: Home, group: "main" },
   { titleKey: "nav.analytics", href: "/analytics", icon: LineChart, group: "main" },
+  { titleKey: "nav.productAnalytics", href: "/product-analytics", icon: Activity, group: "main" },
   { titleKey: "nav.finance", href: "/finance", icon: BarChart3, group: "main" },
 
   { titleKey: "nav.users", href: "/users", icon: Users, group: "management" },

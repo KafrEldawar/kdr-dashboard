@@ -44,6 +44,121 @@ export type RpcListResult<T> = {
   meta: { total: number; page: number; page_size: number; total_pages: number };
 };
 
+export type OrderParty = { id: string; full_name: string | null; phone: string | null };
+
+export type OrderMilestones = {
+  created_at: string;
+  accepted_at: string | null;
+  claimed_at: string | null;
+  picked_up_at: string | null;
+  delivered_at: string | null;
+  /** Gap between each pair of stamps, in minutes. NULL = stage not reached. */
+  minutes_to_accept: number | null;
+  minutes_to_claim: number | null;
+  minutes_to_pickup: number | null;
+  minutes_to_deliver: number | null;
+  minutes_total: number | null;
+};
+
+export type OrderDetail = {
+  id: string;
+  status: string;
+  order_type: "delivery" | "pickup";
+  created_at: string;
+  updated_at: string;
+  notes: string | null;
+  rejection_reason: string | null;
+  estimated_preparation_minutes: number | null;
+  delivery_by_owner: boolean | null;
+  customer: OrderParty & { alternate_phone: string | null };
+  restaurant: {
+    id: string;
+    name_ar: string;
+    name_en: string;
+    logo_url: string | null;
+    commission_percentage: number | null;
+    self_delivery_enabled: boolean | null;
+  };
+  branch: {
+    id: string;
+    name_ar: string;
+    name_en: string;
+    address_ar: string | null;
+    address_en: string | null;
+    phones: string[];
+  } | null;
+  /** NULL until a driver claims it; always NULL for pickup + self-delivery. */
+  driver: OrderParty | null;
+  contact_phone: string | null;
+  alternate_phone: string | null;
+  delivery_address: string | null;
+  branch_lat: number | null;
+  branch_lng: number | null;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
+  delivery_distance_km: number | null;
+  money: {
+    subtotal: number;
+    delivery_fee: number | null;
+    discount: number | null;
+    total_amount: number;
+    commission_percentage: number | null;
+    commission_gross: number | null;
+    commission_amount: number | null;
+    restaurant_revenue: number | null;
+    discount_platform_share: number | null;
+    discount_restaurant_share: number | null;
+    driver_earnings: number | null;
+  };
+  voucher: {
+    id: string;
+    code: string;
+    discount_type: string;
+    discount_value: number;
+  } | null;
+  items: {
+    id: string;
+    menu_item_id: string | null;
+    item_name_ar: string | null;
+    item_name_en: string | null;
+    price: number;
+    quantity: number;
+    line_total: number;
+    special_instructions: string | null;
+  }[];
+  milestones: OrderMilestones;
+  rating: { stars: number; review: string | null; rated_at: string | null } | null;
+  timeline: {
+    id: string;
+    status: string;
+    notes: string | null;
+    created_at: string;
+    changed_by: { id: string; full_name: string | null; role: string } | null;
+  }[];
+};
+
+export type AuthProviderRow = {
+  provider: string;
+  /** Identity links — one account can hold several. */
+  identities: number;
+  /** Accounts whose *signup* provider is this one. */
+  primary_users: number;
+  active_7d: number;
+  active_30d: number;
+  new_30d: number;
+};
+
+export type AuthProviders = {
+  providers: AuthProviderRow[];
+  totals: {
+    users: number;
+    active_7d: number;
+    active_30d: number;
+    new_30d: number;
+    multi_provider: number;
+  };
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rpc(name: string, args?: Record<string, unknown>): Promise<{ data: any; error: any }> {
   const supabase = requireSupabase();
@@ -127,6 +242,52 @@ export const adminService = {
     });
     if (error) throw error;
     return data as RpcListResult<AdminOrder>;
+  },
+
+  /**
+   * Full order picture in one round-trip: parties, line items, money
+   * split, geography, milestone timestamps and the status journal.
+   * Replaces the orders page's bare `select *`, which had no joins.
+   */
+  async getOrderDetail(orderId: string): Promise<OrderDetail> {
+    const { data, error } = await rpc("rpc_admin_get_order_detail", {
+      p_order_id: orderId,
+    });
+    if (error) throw error;
+    return data as OrderDetail;
+  },
+
+  /**
+   * Guarded status change. The RPC rejects transitions that skip
+   * stages and stamps the milestone column matching the new status —
+   * neither of which the old direct table UPDATE did.
+   */
+  async updateOrderStatus(params: { orderId: string; status: string; notes?: string }) {
+    const { data, error } = await rpc("rpc_admin_update_order_status", {
+      p_order_id: params.orderId,
+      p_status: params.status,
+      p_notes: params.notes ?? null,
+    });
+    if (error) throw error;
+    return data as { success: true; from: string; to: string };
+  },
+
+  /** Sign-in provider mix — reads auth.identities, admin-only. */
+  async getAuthProviders(): Promise<AuthProviders> {
+    const { data, error } = await rpc("rpc_admin_get_auth_providers");
+    if (error) throw error;
+    return data as AuthProviders;
+  },
+
+  /**
+   * Runs one of the query lab's whitelisted reports server-side.
+   * The old client-side versions used PostgREST aggregate syntax,
+   * which this project has disabled — they all returned PGRST123.
+   */
+  async runNamedQuery(key: string): Promise<Record<string, unknown>[]> {
+    const { data, error } = await rpc("rpc_admin_run_named_query", { p_key: key });
+    if (error) throw error;
+    return (data as { data: Record<string, unknown>[] }).data ?? [];
   },
 
   async manageCategory(params: {
