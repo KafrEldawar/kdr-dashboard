@@ -1,17 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
-import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, ChevronLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { DataTable } from "@/components/shared/data-table";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -19,92 +15,39 @@ import { SearchInput } from "@/components/shared/search-input";
 import { formatDate } from "@/lib/format";
 import { toAppError } from "@/lib/errors";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { adminService, type OrderHistoryRow } from "@/services/admin";
+import { adminService } from "@/services/admin";
 import { financeService } from "@/services/finance";
 import { useLocale } from "@/lib/i18n";
-import type { Order, OrderStatus } from "@/types/database";
+import type { OrderStatus } from "@/types/database";
+import { OrderDetailModal } from "@/modules/orders/order-detail-modal";
+import {
+  ALL_STATUSES,
+  OrderStatusBadge,
+  STATUS_LABELS,
+} from "@/modules/orders/order-status";
 
-const STATUS_LABELS: Record<OrderStatus, string> = {
-  pending: "قيد الانتظار",
-  preparing: "قيد التحضير",
-  ready_for_pickup: "جاهز للاستلام",
-  out_for_delivery: "في الطريق",
-  delivered: "تم التسليم",
-  picked_up_by_customer: "استلمه العميل",
-  rejected: "مرفوض",
-  cancelled: "ملغي",
-};
-
-const STATUS_VARIANTS: Record<OrderStatus, "default" | "secondary" | "destructive" | "outline"> = {
-  pending: "outline",
-  preparing: "secondary",
-  ready_for_pickup: "secondary",
-  out_for_delivery: "default",
-  delivered: "default",
-  picked_up_by_customer: "default",
-  rejected: "destructive",
-  cancelled: "destructive",
-};
-
-const ALL_STATUSES: OrderStatus[] = ["pending", "preparing", "ready_for_pickup", "out_for_delivery", "delivered", "picked_up_by_customer", "rejected", "cancelled"];
-
-function OrderTimeline({ orderId }: { orderId: string }) {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["order-history", orderId],
-    queryFn: () => adminService.getOrderHistory(orderId),
-  });
-
-  if (isLoading) return <p className="text-xs text-muted-foreground p-3">جاري التحميل…</p>;
-  if (isError) return <p className="text-xs text-destructive p-3">{toAppError(error).message}</p>;
-  if (!data?.length) return <p className="text-xs text-muted-foreground p-3">لا يوجد سجل بعد</p>;
-
-  return (
-    <div className="p-3 space-y-2">
-      {(data as OrderHistoryRow[]).map((entry, i) => (
-        <div key={entry.id} className="flex items-start gap-3">
-          <div className="flex flex-col items-center">
-            <div className={`h-3 w-3 rounded-full border-2 ${
-              i === data.length - 1 ? "bg-primary border-primary" : "bg-muted border-muted-foreground"
-            }`} />
-            {i < data.length - 1 && <div className="w-px h-6 bg-border" />}
-          </div>
-          <div className="flex-1 pb-1">
-            <div className="flex items-center gap-2">
-              <Badge variant={STATUS_VARIANTS[entry.status as OrderStatus]} className="text-xs">
-                {STATUS_LABELS[entry.status as OrderStatus] ?? entry.status}
-              </Badge>
-              <span className="text-xs text-muted-foreground">
-                {formatDate(entry.created_at, "ar")}
-              </span>
-            </div>
-            {entry.changed_by?.full_name ? (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                بواسطة: {entry.changed_by.full_name}
-              </p>
-            ) : null}
-            {entry.notes ? <p className="text-xs mt-0.5">{entry.notes}</p> : null}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
+/**
+ * Live-ops view of the order pipeline. The per-order breakdown —
+ * milestones, parties, money, status journal — lives in the shared
+ * `OrderDetailModal`, so this page stays a queue: what is in flight,
+ * what is stuck, and what needs a human.
+ */
 export function OrderTrackingModule() {
   const queryClient = useQueryClient();
   const locale = useLocale();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
   const ordersQuery = useQuery({
-    queryKey: ["orders-tracking", debouncedSearch, statusFilter],
+    queryKey: ["orders-tracking", statusFilter],
     queryFn: () =>
       adminService.listOrders({
         status: statusFilter !== "all" ? statusFilter : undefined,
         pageSize: 50,
       }),
+    refetchInterval: 30_000,
     retry: false,
   });
 
@@ -116,97 +59,30 @@ export function OrderTrackingModule() {
     retry: false,
   });
 
-  const updateStatusMutation = useMutation({
-    mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) =>
-      adminService.updateUser({ userId: orderId }),
-    onSuccess: () => {
-      toast.success("تم تحديث الحالة");
-      void queryClient.invalidateQueries({ queryKey: ["orders-tracking"] });
-      void queryClient.invalidateQueries({ queryKey: ["order-history", expandedId] });
-    },
-    onError: (err) => toast.error(toAppError(err).message),
-  });
-
   const orders = useMemo(() => {
     const all = ordersQuery.data?.data ?? [];
     if (!debouncedSearch) return all;
     const q = debouncedSearch.toLowerCase();
     return all.filter(
       (o) =>
-        o.id.includes(q) ||
-        o.status.includes(q) ||
+        o.id.toLowerCase().includes(q) ||
+        o.status.toLowerCase().includes(q) ||
         o.customer?.full_name?.toLowerCase().includes(q) ||
-        o.restaurant?.name_ar?.includes(q)
+        o.restaurant?.name_ar?.includes(q) ||
+        o.restaurant?.name_en?.toLowerCase().includes(q)
     );
   }, [ordersQuery.data, debouncedSearch]);
 
-  const columns = useMemo<ColumnDef<typeof orders[0]>[]>(
-    () => [
-      {
-        id: "expand",
-        header: "",
-        cell: ({ row }) => (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setExpandedId(expandedId === row.original.id ? null : row.original.id)}
-          >
-            {expandedId === row.original.id ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-          </Button>
-        ),
-      },
-      {
-        accessorKey: "id",
-        header: "رقم الطلب",
-        cell: ({ row }) => (
-          <span className="font-mono text-xs">{row.original.id.slice(0, 8)}…</span>
-        ),
-      },
-      {
-        accessorKey: "status",
-        header: "الحالة",
-        cell: ({ row }) => (
-          <Badge variant={STATUS_VARIANTS[row.original.status as OrderStatus]}>
-            {STATUS_LABELS[row.original.status as OrderStatus] ?? row.original.status}
-          </Badge>
-        ),
-      },
-      {
-        accessorKey: "restaurant",
-        header: "المطعم",
-        cell: ({ row }) =>
-          locale === "ar"
-            ? row.original.restaurant?.name_ar
-            : row.original.restaurant?.name_en,
-      },
-      {
-        accessorKey: "customer",
-        header: "العميل",
-        cell: ({ row }) => row.original.customer?.full_name ?? "—",
-      },
-      {
-        accessorKey: "total_amount",
-        header: "الإجمالي",
-        cell: ({ row }) => `${row.original.total_amount} ج.م`,
-      },
-      {
-        accessorKey: "created_at",
-        header: "التاريخ",
-        cell: ({ row }) => formatDate(row.original.created_at, locale),
-      },
-    ],
-    [locale, expandedId]
-  );
+  const refreshAll = () => {
+    void queryClient.invalidateQueries({ queryKey: ["orders-tracking"] });
+    void queryClient.invalidateQueries({ queryKey: ["orders-unclaimed"] });
+  };
 
   return (
     <>
       <PageHeader
         title="تتبع الطلبات"
-        description="عرض مسار كل طلب — يُسجَّل كل تغيير في الحالة تلقائياً."
+        description="حالة كل طلب لحظياً — يُحدَّث تلقائياً كل ٣٠ ثانية."
       />
 
       {(unclaimedQuery.data?.length ?? 0) > 0 ? (
@@ -221,18 +97,19 @@ export function OrderTrackingModule() {
           </CardHeader>
           <CardContent className="pt-0 pb-3 space-y-1">
             {unclaimedQuery.data!.map((o) => (
-              <div
+              <button
                 key={o.id}
-                className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
+                onClick={() => setSelectedOrderId(o.id)}
+                className="flex w-full flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-amber-100/60 dark:hover:bg-amber-500/10"
               >
                 <span className="font-mono">{o.id.slice(0, 8)}…</span>
                 <span>{locale === "ar" ? o.restaurant.name_ar : o.restaurant.name_en}</span>
                 <span>{o.customer_name ?? "—"}</span>
                 <span>{o.total_amount} ج.م</span>
-                <span className="text-amber-700 dark:text-amber-400 font-medium">
+                <span className="font-medium text-amber-700 dark:text-amber-400">
                   متأخر {o.overdue_minutes} دقيقة
                 </span>
-              </div>
+              </button>
             ))}
           </CardContent>
         </Card>
@@ -277,42 +154,38 @@ export function OrderTrackingModule() {
             </Card>
           ) : null}
           {orders.map((order) => (
-            <Card key={order.id} className="overflow-hidden">
-              <CardHeader
-                className="py-3 cursor-pointer hover:bg-muted/30 transition-colors"
-                onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
-              >
+            <Card
+              key={order.id}
+              className="cursor-pointer overflow-hidden transition-colors hover:bg-muted/30"
+              onClick={() => setSelectedOrderId(order.id)}
+            >
+              <CardHeader className="py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    {expandedId === order.id ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    )}
                     <span className="font-mono text-xs">{order.id.slice(0, 12)}…</span>
-                    <Badge variant={STATUS_VARIANTS[order.status as OrderStatus]}>
-                      {STATUS_LABELS[order.status as OrderStatus]}
-                    </Badge>
+                    <OrderStatusBadge status={order.status as OrderStatus} />
                   </div>
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <Badge variant="outline">
+                      {locale === "ar" ? order.restaurant?.name_ar : order.restaurant?.name_en}
+                    </Badge>
                     <span>{order.customer?.full_name ?? "—"}</span>
-                    <span>{order.total_amount} ج.م</span>
+                    <span className="tabular-nums">{order.total_amount} ج.م</span>
                     <span>{formatDate(order.created_at, locale)}</span>
+                    <ChevronLeft className="h-4 w-4" />
                   </div>
                 </div>
               </CardHeader>
-              {expandedId === order.id ? (
-                <CardContent className="pt-0 pb-3 border-t">
-                  <p className="text-xs font-semibold text-muted-foreground mb-2 mt-3 px-3">
-                    مسار الطلب
-                  </p>
-                  <OrderTimeline orderId={order.id} />
-                </CardContent>
-              ) : null}
             </Card>
           ))}
         </div>
       ) : null}
+
+      <OrderDetailModal
+        orderId={selectedOrderId}
+        onClose={() => setSelectedOrderId(null)}
+        onUpdated={refreshAll}
+      />
     </>
   );
 }

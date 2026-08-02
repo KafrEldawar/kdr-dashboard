@@ -11,152 +11,154 @@ import { ErrorState } from "@/components/shared/error-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { toAppError } from "@/lib/errors";
 import { adminService } from "@/services/admin";
-import { requireSupabase } from "@/lib/supabase/client";
 
+/**
+ * Query keys must match the whitelist in `rpc_admin_run_named_query`
+ * (migration 064). Every query used to run in the browser through
+ * PostgREST's aggregate syntax (`count:id.count()`), but aggregates
+ * are disabled on this project, so five of the eight always failed
+ * with PGRST123. They now live in SQL inside the RPC — which also
+ * lets them join across tables instead of returning bare UUIDs.
+ */
 type NamedQuery = {
-  id: string;
+  key: string;
   label: string;
   description: string;
-  run: () => Promise<unknown[]>;
 };
 
-function makeQueries(): NamedQuery[] {
-  const supabase = requireSupabase();
-  return [
-    {
-      id: "top-restaurants",
-      label: "أكثر المطاعم طلبات",
-      description: "المطاعم مرتبة حسب عدد الطلبات",
-      run: async () => {
-        const { data, error } = await supabase
-          .from("orders")
-          .select("restaurant_id, count:id.count()")
-          .limit(10);
-        if (error) throw error;
-        return data ?? [];
-      },
-    },
-    {
-      id: "recent-orders",
-      label: "آخر 20 طلب",
-      description: "الطلبات الأحدث مع الحالة والإجمالي",
-      run: async () => {
-        const { data, error } = await supabase
-          .from("orders")
-          .select("id, status, total_amount, created_at")
-          .order("created_at", { ascending: false })
-          .limit(20);
-        if (error) throw error;
-        return data ?? [];
-      },
-    },
-    {
-      id: "users-by-role",
-      label: "المستخدمون حسب الدور",
-      description: "إجمالي المستخدمين لكل دور",
-      run: async () => {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("role, count:id.count()");
-        if (error) throw error;
-        return data ?? [];
-      },
-    },
-    {
-      id: "active-vouchers",
-      label: "أكواد الخصم النشطة",
-      description: "الأكواد النشطة مع عدد الاستخدام",
-      run: async () => {
-        const { data, error } = await supabase
-          .from("vouchers")
-          .select("code, discount_type, discount_value, used_count, usage_limit, valid_to")
-          .eq("is_active", true)
-          .order("used_count", { ascending: false })
-          .limit(20);
-        if (error) throw error;
-        return data ?? [];
-      },
-    },
-    {
-      id: "revenue-by-status",
-      label: "الإيرادات حسب الحالة",
-      description: "مجموع total_amount لكل حالة طلب",
-      run: async () => {
-        const { data, error } = await supabase
-          .from("orders")
-          .select("status, sum:total_amount.sum()");
-        if (error) throw error;
-        return data ?? [];
-      },
-    },
-    {
-      id: "menu-items-count",
-      label: "عناصر المنيو لكل مطعم",
-      description: "عدد عناصر المنيو مرتبة تنازلياً",
-      run: async () => {
-        const { data, error } = await supabase
-          .from("menu_items")
-          .select("restaurant_id, count:id.count()")
-          .limit(20);
-        if (error) throw error;
-        return data ?? [];
-      },
-    },
-    {
-      id: "audit-summary",
-      label: "ملخص سجل الأنشطة",
-      description: "آخر 20 نشاط في النظام",
-      run: async () => {
-        const result = await adminService.listAuditLogs({ pageSize: 20 });
-        return result.data;
-      },
-    },
-    {
-      id: "top-rated",
-      label: "أعلى تقييمات",
-      description: "المطاعم الأعلى تقييماً (متوسط من الطلبات)",
-      run: async () => {
-        const { data, error } = await supabase
-          .from("orders")
-          .select("restaurant_id, avg:restaurant_rating.avg()")
-          .not("restaurant_rating", "is", null)
-          .limit(10);
-        if (error) throw error;
-        return data ?? [];
-      },
-    },
-  ];
-}
+const QUERIES: NamedQuery[] = [
+  {
+    key: "top_restaurants",
+    label: "أكثر المطاعم طلبات",
+    description: "الطلبات والإيراد ومتوسط الطلب لكل مطعم",
+  },
+  {
+    key: "orders_by_day",
+    label: "الطلبات يوماً بيوم",
+    description: "آخر ٣٠ يوم — العدد والمُسلَّم والإيراد",
+  },
+  {
+    key: "recent_orders",
+    label: "آخر ٢٠ طلب",
+    description: "الأحدث مع اسم المطعم والعميل والحالة",
+  },
+  {
+    key: "revenue_by_status",
+    label: "الإيرادات حسب الحالة",
+    description: "الإجمالي والعمولة ورسوم التوصيل لكل حالة",
+  },
+  {
+    key: "delivery_performance",
+    label: "أداء التوصيل",
+    description: "متوسط دقائق كل مرحلة لكل مطعم",
+  },
+  {
+    key: "users_by_role",
+    label: "المستخدمون حسب الدور",
+    description: "العدد والنشط والمُوثَّق لكل دور",
+  },
+  {
+    key: "top_customers",
+    label: "أكثر العملاء طلباً",
+    description: "أعلى ٢٠ عميل بعدد الطلبات وإجمالي الإنفاق",
+  },
+  {
+    key: "top_rated",
+    label: "أعلى تقييمات",
+    description: "متوسط تقييم كل مطعم وعدد التقييمات",
+  },
+  {
+    key: "menu_items_per_restaurant",
+    label: "عناصر المنيو لكل مطعم",
+    description: "العدد الكلي والمتاح منه",
+  },
+  {
+    key: "active_vouchers",
+    label: "أكواد الخصم النشطة",
+    description: "الأكواد النشطة مع عدد الاستخدام وحالة الصلاحية",
+  },
+  {
+    key: "audit_summary",
+    label: "ملخص سجل الأنشطة",
+    description: "آخر ٣٠ نشاط في النظام",
+  },
+];
+
+/** Arabic headers for the columns the RPC returns. */
+const COLUMN_LABELS: Record<string, string> = {
+  restaurant: "المطعم",
+  customer: "العميل",
+  orders: "الطلبات",
+  delivered: "مُسلَّم",
+  cancelled: "ملغي/مرفوض",
+  revenue: "الإيراد",
+  avg_order: "متوسط الطلب",
+  order_id: "رقم الطلب",
+  status: "الحالة",
+  total: "الإجمالي",
+  spent: "إجمالي الإنفاق",
+  commission: "العمولة",
+  delivery_fees: "رسوم التوصيل",
+  created_at: "التاريخ",
+  last_order: "آخر طلب",
+  day: "اليوم",
+  role: "الدور",
+  active: "نشط",
+  phone: "الموبايل",
+  phone_verified: "موثَّق الرقم",
+  whatsapp_opt_in: "واتساب",
+  new_30d: "جديد (٣٠ يوم)",
+  items: "العناصر",
+  available: "متاح",
+  code: "الكود",
+  discount_type: "نوع الخصم",
+  discount_value: "قيمة الخصم",
+  used_count: "مرات الاستخدام",
+  usage_limit: "الحد الأقصى",
+  valid_to: "ينتهي في",
+  expired: "منتهي",
+  avg_rating: "متوسط التقييم",
+  ratings: "عدد التقييمات",
+  five_star: "٥ نجوم",
+  avg_accept_min: "دقائق القبول",
+  avg_claim_min: "دقائق الاستلام",
+  avg_pickup_min: "دقائق الخروج",
+  avg_deliver_min: "دقائق التسليم",
+  avg_total_min: "الإجمالي (دقيقة)",
+  action: "الإجراء",
+  table: "الجدول",
+  record_id: "المعرّف",
+  user: "المستخدم",
+};
 
 export function QueryLabModule() {
   const [activeQuery, setActiveQuery] = useState<NamedQuery | null>(null);
-  const queries = makeQueries();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["query-lab", activeQuery?.id],
-    queryFn: () => activeQuery!.run(),
+    queryKey: ["query-lab", activeQuery?.key],
+    queryFn: () => adminService.runNamedQuery(activeQuery!.key),
     enabled: Boolean(activeQuery),
     retry: false,
   });
 
-  const keys = data && data.length > 0 ? Object.keys(data[0] as object) : [];
+  const keys = data && data.length > 0 ? Object.keys(data[0]) : [];
 
   return (
     <>
       <PageHeader
         title="معمل الاستعلامات"
-        description="استعلامات جاهزة تُشغَّل مباشرة على قاعدة البيانات."
+        description="تقارير جاهزة تُنفَّذ داخل قاعدة البيانات مباشرة."
       />
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase text-muted-foreground mb-3">الاستعلامات</p>
-          {queries.map((q) => (
+          {QUERIES.map((q) => (
             <button
-              key={q.id}
+              key={q.key}
               onClick={() => setActiveQuery(q)}
               className={`w-full text-start rounded-lg border p-3 text-sm transition hover:bg-muted ${
-                activeQuery?.id === q.id ? "border-primary bg-primary/5" : ""
+                activeQuery?.key === q.key ? "border-primary bg-primary/5" : ""
               }`}
             >
               <p className="font-medium">{q.label}</p>
@@ -194,42 +196,36 @@ export function QueryLabModule() {
                   <p className="text-sm text-muted-foreground text-center py-8">لا يوجد نتائج</p>
                 ) : null}
                 {data && data.length > 0 ? (
-                  <div className="overflow-x-auto rounded-lg border border-border">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-primary/15 bg-accent">
-                          {keys.map((k) => (
-                            <th key={k} className="py-2.5 px-3 text-start font-bold text-accent-foreground">
-                              {k}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.map((row, i) => (
-                          <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
-                            {keys.map((k) => {
-                              const val = (row as Record<string, unknown>)[k];
-                              return (
-                                <td key={k} className="py-2 px-3 font-mono">
-                                  {val === null || val === undefined ? (
-                                    <span className="text-muted-foreground">null</span>
-                                  ) : typeof val === "object" ? (
-                                    <Badge variant="outline" className="text-xs">
-                                      {JSON.stringify(val).slice(0, 40)}
-                                    </Badge>
-                                  ) : (
-                                    String(val)
-                                  )}
-                                </td>
-                              );
-                            })}
+                  <>
+                    <div className="overflow-x-auto rounded-lg border border-border">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-primary/15 bg-accent">
+                            {keys.map((k) => (
+                              <th
+                                key={k}
+                                className="py-2.5 px-3 text-start font-bold text-accent-foreground whitespace-nowrap"
+                              >
+                                {COLUMN_LABELS[k] ?? k}
+                              </th>
+                            ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {data.map((row, i) => (
+                            <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                              {keys.map((k) => (
+                                <td key={k} className="py-2 px-3">
+                                  <Cell value={row[k]} />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                     <p className="mt-3 text-xs text-muted-foreground">{data.length} نتيجة</p>
-                  </div>
+                  </>
                 ) : null}
               </CardContent>
             </Card>
@@ -238,4 +234,28 @@ export function QueryLabModule() {
       </div>
     </>
   );
+}
+
+function Cell({ value }: { value: unknown }) {
+  if (value === null || value === undefined) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  if (typeof value === "boolean") {
+    return (
+      <Badge variant={value ? "default" : "secondary"} className="text-xs">
+        {value ? "نعم" : "لا"}
+      </Badge>
+    );
+  }
+  if (typeof value === "object") {
+    return (
+      <Badge variant="outline" className="text-xs">
+        {JSON.stringify(value).slice(0, 40)}
+      </Badge>
+    );
+  }
+  if (typeof value === "number") {
+    return <span className="font-mono tabular-nums">{value.toLocaleString("en-US")}</span>;
+  }
+  return <span className="font-mono">{String(value)}</span>;
 }

@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Activity, ClipboardList, Store, Users,
-  ShoppingCart, Star, Tag, TrendingUp, Bell, FileText,
+  ShoppingCart, Star, Tag, TrendingUp, Bell, FileText, KeyRound,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +19,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { formatDate } from "@/lib/format";
 import { toAppError } from "@/lib/errors";
-import { adminService, type AuditLog } from "@/services/admin";
+import { adminService, type AuditLog, type AuthProviders } from "@/services/admin";
 import { useLocale } from "@/lib/i18n";
 
 const TABLE_OPTIONS = [
@@ -54,6 +54,12 @@ export function AnalyticsModule() {
   const campaignsQuery = useQuery({
     queryKey: ["campaigns-count"],
     queryFn: () => adminService.listCampaigns({ pageSize: 1 }),
+    retry: false,
+  });
+
+  const providersQuery = useQuery({
+    queryKey: ["auth-providers"],
+    queryFn: () => adminService.getAuthProviders(),
     retry: false,
   });
 
@@ -169,6 +175,8 @@ export function AnalyticsModule() {
         </Card>
       </div>
 
+      <AuthProvidersCard query={providersQuery} />
+
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold flex items-center gap-2">
@@ -213,5 +221,103 @@ export function AnalyticsModule() {
         ) : null}
       </div>
     </>
+  );
+}
+
+/** Arabic name + accent colour per Supabase auth provider. */
+const PROVIDER_META: Record<string, { label: string; bar: string }> = {
+  // Not really email signup — it's the synthetic-email scheme the
+  // WhatsApp OTP flow uses (migration 051), so it reads as "phone".
+  email: { label: "رقم الموبايل (OTP)", bar: "bg-emerald-500" },
+  google: { label: "جوجل", bar: "bg-blue-500" },
+  apple: { label: "آبل", bar: "bg-zinc-700 dark:bg-zinc-300" },
+  phone: { label: "رقم الموبايل", bar: "bg-emerald-500" },
+};
+
+function AuthProvidersCard({
+  query,
+}: {
+  query: UseQueryResult<AuthProviders, Error>;
+}) {
+  const data = query.data;
+  const max = Math.max(1, ...(data?.providers.map((p) => p.identities) ?? [1]));
+
+  return (
+    <Card className="mb-8">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <KeyRound className="h-4 w-4" /> طرق تسجيل الدخول
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          حساب واحد ممكن يربط أكتر من طريقة، فمجموع «الارتباطات» بيزيد عن عدد الحسابات.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {query.isLoading ? <LoadingState /> : null}
+        {query.isError ? (
+          <ErrorState
+            description={toAppError(query.error).message}
+            onRetry={() => query.refetch()}
+          />
+        ) : null}
+
+        {data ? (
+          <>
+            <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <MiniStat label="إجمالي الحسابات" value={data.totals.users} />
+              <MiniStat label="نشط آخر ٧ أيام" value={data.totals.active_7d} />
+              <MiniStat label="نشط آخر ٣٠ يوم" value={data.totals.active_30d} />
+              <MiniStat label="جديد آخر ٣٠ يوم" value={data.totals.new_30d} />
+            </div>
+
+            <div className="space-y-3">
+              {data.providers.map((p) => {
+                const meta = PROVIDER_META[p.provider] ?? {
+                  label: p.provider,
+                  bar: "bg-primary",
+                };
+                const share = Math.round((p.identities / data.totals.users) * 100);
+                return (
+                  <div key={p.provider}>
+                    <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                      <span className="font-medium">{meta.label}</span>
+                      <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+                        <span>نشط ٧ أيام: {p.active_7d}</span>
+                        <span>·</span>
+                        <span>جديد ٣٠ يوم: {p.new_30d}</span>
+                        <Badge variant="secondary" className="tabular-nums">
+                          {p.identities} ({share}%)
+                        </Badge>
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={`h-full rounded-full ${meta.bar}`}
+                        style={{ width: `${(p.identities / max) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {data.totals.multi_provider > 0 ? (
+              <p className="mt-4 text-xs text-muted-foreground">
+                {data.totals.multi_provider} حساب مربوط بأكتر من طريقة دخول.
+              </p>
+            ) : null}
+          </>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-2xl font-bold tabular-nums">{value}</p>
+    </div>
   );
 }
