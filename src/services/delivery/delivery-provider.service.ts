@@ -204,3 +204,45 @@ export const deliveryProviderService = {
     return (data ?? []) as ProviderSettlement[];
   },
 };
+
+export type OrderRelease = {
+  id: string;
+  created_at: string;
+  order_id: string;
+  reason: string | null;
+  driver_name: string | null;
+  driver_phone: string | null;
+  provider_kind: DeliveryProviderKind;
+  office_name: string | null;
+  order_status: string | null;
+  delivery_address: string | null;
+  total_amount: number | null;
+  restaurant_name: string | null;
+};
+
+export type ReleasesByDriver = {
+  driver_id: string;
+  driver_name: string | null;
+  provider_kind: DeliveryProviderKind;
+  releases: number;
+};
+
+export type OrderReleasesResult = {
+  data: OrderRelease[];
+  by_driver: ReleasesByDriver[];
+  meta: { total: number; page: number; page_size: number; total_pages: number };
+};
+
+export const orderReleasesService = {
+  /** Orders handed back to the pool, with the reason the rider gave. */
+  async list(params: { from?: string; to?: string; page?: number } = {}) {
+    const { data, error } = await rpc("rpc_admin_get_order_releases", {
+      p_from: params.from ?? null,
+      p_to: params.to ?? null,
+      p_page: params.page ?? 1,
+      p_page_size: 30,
+    });
+    if (error) throw error;
+    return data as OrderReleasesResult;
+  },
+};
