@@ -22,6 +22,7 @@ import { toAppError } from "@/lib/errors";
 import { adminService } from "@/services/admin";
 import { requireSupabase } from "@/lib/supabase/client";
 import { useAuth } from "@/providers/auth-provider";
+import { OrderingSwitchCard } from "@/modules/settings/ordering-switch-card";
 
 const notifSchema = z.object({
   title_ar: z.string().min(2, "العنوان مطلوب"),
@@ -97,6 +98,9 @@ export function SettingsModule() {
       <PageHeader title="الإعدادات" description="إعدادات لوحة التحكم والإشعارات." />
 
       <div className="grid gap-6 lg:grid-cols-2">
+        {/* Kill switch first — it's the thing you come here for in a hurry. */}
+        <OrderingSwitchCard />
+
         {/* Admin account */}
         <Card>
           <CardHeader>
