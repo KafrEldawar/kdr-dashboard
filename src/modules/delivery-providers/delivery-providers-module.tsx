@@ -23,6 +23,11 @@ import {
 
 const QUERY_KEY = ["delivery-providers"];
 
+/// Upper bound on an office's concurrent orders. Must stay in step with the
+/// `delivery_providers_max_concurrent_orders_check` constraint — the DB is
+/// what actually rejects a bad value; this is just a friendlier message.
+const MAX_OFFICE_CAPACITY = 100;
+
 export function DeliveryProvidersModule() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<DeliveryProvider | null>(null);
@@ -190,8 +195,9 @@ function ProviderSettingsModal({
     mutationFn: () => {
       if (!provider) throw new Error("لا يوجد حساب محدد");
       const parsed = parseInt(maxOrders, 10);
-      if (kind === "office" && (Number.isNaN(parsed) || parsed < 1 || parsed > 50)) {
-        throw new Error("السعة لازم تكون رقم بين 1 و 50");
+      // Mirrors delivery_providers_max_concurrent_orders_check (migration 073).
+      if (kind === "office" && (Number.isNaN(parsed) || parsed < 1 || parsed > MAX_OFFICE_CAPACITY)) {
+        throw new Error(`السعة لازم تكون رقم بين 1 و ${MAX_OFFICE_CAPACITY}`);
       }
       return deliveryProviderService.upsert({
         profileId: provider.id,
@@ -282,7 +288,7 @@ function ProviderSettingsModal({
               id="max-orders"
               type="number"
               min={1}
-              max={50}
+              max={MAX_OFFICE_CAPACITY}
               value={maxOrders}
               onChange={(e) => setMaxOrders(e.target.value)}
             />
