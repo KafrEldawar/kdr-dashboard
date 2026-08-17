@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Edit, Trash2, Plus, ToggleRight } from "lucide-react";
+import { Edit, Trash2, Plus, ToggleRight, Ruler } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,8 @@ import {
   menuBadgeLabel,
   menuBadgeClassName,
 } from "@/lib/menu-badges";
+import { VariantsEditor } from "./variants-editor";
+import { menuVariantsService } from "@/services/menu";
 import type { MenuItem } from "@/types/database";
 
 const schema = z.object({
@@ -226,6 +228,7 @@ export function MenuItemsModule() {
   const [addOpen, setAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<MenuItem | null>(null);
+  const [variantsItem, setVariantsItem] = useState<MenuItem | null>(null);
   const debouncedSearch = useDebouncedValue(search);
 
   const itemsQuery = useQuery({
@@ -250,6 +253,26 @@ export function MenuItemsModule() {
 
   const restaurants = restaurantsQuery.data?.data ?? [];
   const categories = categoriesQuery.data?.data ?? [];
+
+  const itemIds = useMemo(
+    () => (itemsQuery.data?.data ?? []).map((i) => i.id),
+    [itemsQuery.data]
+  );
+
+  // Variant counts for the visible page, so the table can say which items
+  // carry sizes without opening each one.
+  const variantCountsQuery = useQuery({
+    queryKey: ["menu-item-variant-counts", itemIds],
+    queryFn: () => menuVariantsService.countsForItems(itemIds),
+    enabled: itemIds.length > 0,
+  });
+
+  // Memoised so the `columns` useMemo below isn't invalidated every render
+  // by a fresh `{}` literal.
+  const variantCounts = useMemo(
+    () => variantCountsQuery.data ?? {},
+    [variantCountsQuery.data]
+  );
 
   const createForm = useForm<MenuItemForm>({ resolver: zodResolver(schema), defaultValues });
   const editForm = useForm<MenuItemForm>({ resolver: zodResolver(schema), defaultValues });
@@ -362,7 +385,26 @@ export function MenuItemsModule() {
       {
         accessorKey: "price",
         header: t("menuItems.field.price"),
-        cell: ({ row }) => `${row.original.price} ج.م`,
+        // With variants the item price is the DEFAULT variant's price, kept
+        // in sync by trigger — labelling it "من" avoids reading as a flat price.
+        cell: ({ row }) => {
+          const count = variantCounts[row.original.id] ?? 0;
+          return count > 1
+            ? `من ${row.original.price} ج.م`
+            : `${row.original.price} ج.م`;
+        },
+      },
+      {
+        id: "variants",
+        header: "الأحجام",
+        cell: ({ row }) => {
+          const count = variantCounts[row.original.id] ?? 0;
+          return count > 0 ? (
+            <Badge variant="outline">{count}</Badge>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          );
+        },
       },
       {
         accessorKey: "is_available",
@@ -423,6 +465,15 @@ export function MenuItemsModule() {
                 <Edit className="h-4 w-4" />
                 {t("common.edit")}
               </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setVariantsItem(item)}
+                title="أحجام الصنف"
+              >
+                <Ruler className="h-4 w-4" />
+                الأحجام
+              </Button>
               <Button size="sm" variant="secondary" onClick={() => toggleMutation.mutate(item)}>
                 <ToggleRight className="h-4 w-4" />
               </Button>
@@ -434,7 +485,7 @@ export function MenuItemsModule() {
         },
       },
     ],
-    [t, locale, editForm, toggleMutation, restaurants]
+    [t, locale, editForm, toggleMutation, restaurants, variantCounts]
   );
 
   return (
@@ -523,6 +574,12 @@ export function MenuItemsModule() {
           onCancel={() => setEditingItem(null)}
         />
       </Modal>
+
+      <VariantsEditor
+        item={variantsItem}
+        open={Boolean(variantsItem)}
+        onOpenChange={(open) => !open && setVariantsItem(null)}
+      />
 
       <ConfirmDialog
         open={Boolean(deletingItem)}
