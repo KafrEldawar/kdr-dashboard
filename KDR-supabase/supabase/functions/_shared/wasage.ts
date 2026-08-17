@@ -134,11 +134,27 @@ export async function createWasageVerification(
 
 /**
  * Wasage's own `Clickable` link pre-fills WhatsApp with *just* the bare
- * token (confirmed live: `wa.me/<num>?text=<token>`) — no explanation, so
- * the recipient sees a cryptic code addressed to an unfamiliar number.
- * We rebuild the link ourselves: same destination number, but wrapped in
- * a short Arabic explanation (GetContact-style) around the *unmodified*
- * token, so wasage still finds the exact string it's expecting.
+ * token (`wa.me/<num>?text=<token>`) — no explanation, so the recipient
+ * sees a cryptic code addressed to an unfamiliar number. We used to
+ * rebuild the link with a short Arabic explanation wrapped around the
+ * unmodified token.
+ *
+ * ── DISABLED BY DEFAULT since 2026-08-17 ──────────────────────────
+ * That wrapping worked from 2026-07-26 until 2026-08-14 (87 completed
+ * verifications), then stopped: every attempt from 2026-08-15 20:20 UTC
+ * onward stayed `pending`, and wasage began replying "Invalid code —
+ * Contact Customer Support" on WhatsApp. Nothing shipped on our side in
+ * that window (wasage-start has been on v3 since 2026-07-26), and a bare
+ * token sent by hand on 2026-08-17 still verified in seconds — so wasage
+ * tightened how it matches the inbound message body and now rejects
+ * anything that is not the token alone.
+ *
+ * We do not control that parser, so the wrapping is now opt-in via
+ * `WASAGE_WRAP_MESSAGE=true`. Leave it off unless wasage support
+ * confirms a supported way to send surrounding text; flipping the env
+ * var restores the old behaviour without a redeploy. The user-facing
+ * explanation belongs on WasageWaitScreen instead, where it costs
+ * nothing and cannot break verification.
  *
  * Always falls back to wasage's original `clickable` link — unmodified —
  * if the number can't be parsed out of it or there's no token to embed,
@@ -171,6 +187,12 @@ export function buildCustomWasageClickable(
   otp: string | null | undefined,
 ): string | null {
   if (!clickable) return clickable ?? null;
+
+  // Off unless explicitly re-enabled — see the note above. Sending
+  // anything but the bare token currently makes wasage reject the
+  // message, which locks every user out of login.
+  if (Deno.env.get("WASAGE_WRAP_MESSAGE") !== "true") return clickable;
+
   const number = extractWasageNumber(clickable);
   if (!number || !otp || !otp.trim()) return clickable;
   return `https://wa.me/${number}?text=${encodeURIComponent(buildWasageOtpMessage(otp))}`;
