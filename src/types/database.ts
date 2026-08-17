@@ -14,6 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_deletion_requests: {
+        Row: {
+          auth_method: string
+          created_at: string
+          email: string | null
+          handled_at: string | null
+          handled_by: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string
+          reason: string | null
+          request_id: string
+          source: string
+          status: string
+        }
+        Insert: {
+          auth_method: string
+          created_at?: string
+          email?: string | null
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone: string
+          reason?: string | null
+          request_id: string
+          source?: string
+          status?: string
+        }
+        Update: {
+          auth_method?: string
+          created_at?: string
+          email?: string | null
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string
+          reason?: string | null
+          request_id?: string
+          source?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_deletion_requests_handled_by_fkey"
+            columns: ["handled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_config: {
         Row: {
           key: string
@@ -26,6 +82,42 @@ export type Database = {
         Update: {
           key?: string
           value?: string
+        }
+        Relationships: []
+      }
+      app_events: {
+        Row: {
+          app_version: string | null
+          created_at: string
+          event: string
+          id: number
+          occurred_at: string
+          platform: string | null
+          props: Json
+          session_id: string
+          user_id: string | null
+        }
+        Insert: {
+          app_version?: string | null
+          created_at?: string
+          event: string
+          id?: never
+          occurred_at: string
+          platform?: string | null
+          props?: Json
+          session_id: string
+          user_id?: string | null
+        }
+        Update: {
+          app_version?: string | null
+          created_at?: string
+          event?: string
+          id?: never
+          occurred_at?: string
+          platform?: string | null
+          props?: Json
+          session_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -221,28 +313,34 @@ export type Database = {
       }
       cart_items: {
         Row: {
+          addon_ids: string[]
           cart_id: string
           created_at: string
           id: string
           menu_item_id: string
           quantity: number
           special_instructions: string | null
+          variant_id: string | null
         }
         Insert: {
+          addon_ids?: string[]
           cart_id: string
           created_at?: string
           id?: string
           menu_item_id: string
           quantity?: number
           special_instructions?: string | null
+          variant_id?: string | null
         }
         Update: {
+          addon_ids?: string[]
           cart_id?: string
           created_at?: string
           id?: string
           menu_item_id?: string
           quantity?: number
           special_instructions?: string | null
+          variant_id?: string | null
         }
         Relationships: [
           {
@@ -257,6 +355,13 @@ export type Database = {
             columns: ["menu_item_id"]
             isOneToOne: false
             referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cart_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "menu_item_variants"
             referencedColumns: ["id"]
           },
         ]
@@ -323,38 +428,93 @@ export type Database = {
         }
         Relationships: []
       }
-      menu_categories: {
+      contact_messages: {
         Row: {
           created_at: string
+          email: string | null
+          handled_at: string | null
+          handled_by: string | null
           id: string
-          image_url: string | null
+          message: string
+          name: string
+          phone: string
+          source: string
+          status: string
+          subject: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          message: string
+          name: string
+          phone: string
+          source?: string
+          status?: string
+          subject: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          message?: string
+          name?: string
+          phone?: string
+          source?: string
+          status?: string
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_messages_handled_by_fkey"
+            columns: ["handled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_providers: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
           is_active: boolean
-          name_ar: string
-          name_en: string
-          sort_order: number
+          kind: string
+          max_concurrent_orders: number
           updated_at: string
         }
         Insert: {
           created_at?: string
-          id?: string
-          image_url?: string | null
+          display_name?: string | null
+          id: string
           is_active?: boolean
-          name_ar: string
-          name_en: string
-          sort_order?: number
+          kind?: string
+          max_concurrent_orders?: number
           updated_at?: string
         }
         Update: {
           created_at?: string
+          display_name?: string | null
           id?: string
-          image_url?: string | null
           is_active?: boolean
-          name_ar?: string
-          name_en?: string
-          sort_order?: number
+          kind?: string
+          max_concurrent_orders?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "delivery_providers_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       device_tokens: {
         Row: {
@@ -390,6 +550,163 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_addon_groups: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          max_select: number | null
+          min_select: number
+          name_ar: string
+          name_en: string
+          restaurant_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_select?: number | null
+          min_select?: number
+          name_ar: string
+          name_en: string
+          restaurant_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_select?: number | null
+          min_select?: number
+          name_ar?: string
+          name_en?: string
+          restaurant_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_addon_groups_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_addons: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          is_available: boolean
+          name_ar: string
+          name_en: string
+          price_delta: number
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          is_available?: boolean
+          name_ar: string
+          name_en: string
+          price_delta?: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          is_available?: boolean
+          name_ar?: string
+          name_en?: string
+          price_delta?: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_addons_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "menu_addon_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_categories: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string | null
+          is_active: boolean
+          name_ar: string
+          name_en: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name_ar: string
+          name_en: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name_ar?: string
+          name_en?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      menu_item_addon_groups: {
+        Row: {
+          group_id: string
+          menu_item_id: string
+          sort_order: number
+        }
+        Insert: {
+          group_id: string
+          menu_item_id: string
+          sort_order?: number
+        }
+        Update: {
+          group_id?: string
+          menu_item_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_item_addon_groups_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "menu_addon_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_item_addon_groups_menu_item_id_fkey"
+            columns: ["menu_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
             referencedColumns: ["id"]
           },
         ]
@@ -454,84 +771,46 @@ export type Database = {
           },
         ]
       }
-      menu_item_option_choices: {
+      menu_item_variants: {
         Row: {
           created_at: string
           id: string
           is_available: boolean
-          name_ar: string
-          name_en: string | null
-          option_id: string
-          price_extra: number
-          sort_order: number
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_available?: boolean
-          name_ar: string
-          name_en?: string | null
-          option_id: string
-          price_extra?: number
-          sort_order?: number
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_available?: boolean
-          name_ar?: string
-          name_en?: string | null
-          option_id?: string
-          price_extra?: number
-          sort_order?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "menu_item_option_choices_option_id_fkey"
-            columns: ["option_id"]
-            isOneToOne: false
-            referencedRelation: "menu_item_options"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      menu_item_options: {
-        Row: {
-          allow_multiple: boolean
-          created_at: string
-          id: string
-          is_required: boolean
+          is_default: boolean
           menu_item_id: string
           name_ar: string
-          name_en: string | null
+          name_en: string
+          price: number
           sort_order: number
           updated_at: string
         }
         Insert: {
-          allow_multiple?: boolean
           created_at?: string
           id?: string
-          is_required?: boolean
+          is_available?: boolean
+          is_default?: boolean
           menu_item_id: string
           name_ar: string
-          name_en?: string | null
+          name_en: string
+          price: number
           sort_order?: number
           updated_at?: string
         }
         Update: {
-          allow_multiple?: boolean
           created_at?: string
           id?: string
-          is_required?: boolean
+          is_available?: boolean
+          is_default?: boolean
           menu_item_id?: string
           name_ar?: string
-          name_en?: string | null
+          name_en?: string
+          price?: number
           sort_order?: number
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "menu_item_options_menu_item_id_fkey"
+            foreignKeyName: "menu_item_variants_menu_item_id_fkey"
             columns: ["menu_item_id"]
             isOneToOne: false
             referencedRelation: "menu_items"
@@ -732,8 +1011,48 @@ export type Database = {
           },
         ]
       }
+      office_couriers: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          is_active: boolean
+          office_id: string
+          phone: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id?: string
+          is_active?: boolean
+          office_id: string
+          phone: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          office_id?: string
+          phone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "office_couriers_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
+          addons: Json
+          base_price: number | null
           id: string
           item_name_ar: string
           item_name_en: string
@@ -742,8 +1061,13 @@ export type Database = {
           price: number
           quantity: number
           special_instructions: string | null
+          variant_id: string | null
+          variant_name_ar: string | null
+          variant_name_en: string | null
         }
         Insert: {
+          addons?: Json
+          base_price?: number | null
           id?: string
           item_name_ar: string
           item_name_en: string
@@ -752,8 +1076,13 @@ export type Database = {
           price: number
           quantity?: number
           special_instructions?: string | null
+          variant_id?: string | null
+          variant_name_ar?: string | null
+          variant_name_en?: string | null
         }
         Update: {
+          addons?: Json
+          base_price?: number | null
           id?: string
           item_name_ar?: string
           item_name_en?: string
@@ -762,6 +1091,9 @@ export type Database = {
           price?: number
           quantity?: number
           special_instructions?: string | null
+          variant_id?: string | null
+          variant_name_ar?: string | null
+          variant_name_en?: string | null
         }
         Relationships: [
           {
@@ -826,14 +1158,17 @@ export type Database = {
         Row: {
           accepted_at: string | null
           alternate_phone: string | null
+          assigned_at: string | null
           branch_id: string | null
           branch_lat: number | null
           branch_lng: number | null
           claimed_at: string | null
+          collected_amount: number | null
           commission_amount: number
           commission_gross: number
           commission_percentage: number
           contact_phone: string
+          courier_id: string | null
           created_at: string
           delivered_at: string | null
           delivery_address: string | null
@@ -858,24 +1193,29 @@ export type Database = {
           restaurant_rating: number | null
           restaurant_revenue: number
           restaurant_review: string | null
+          settled_at: string | null
+          settlement_id: string | null
           status: Database["public"]["Enums"]["order_status"]
           subtotal: number
           total_amount: number
           updated_at: string
-          user_id: string
+          user_id: string | null
           voucher_id: string | null
         }
         Insert: {
           accepted_at?: string | null
           alternate_phone?: string | null
+          assigned_at?: string | null
           branch_id?: string | null
           branch_lat?: number | null
           branch_lng?: number | null
           claimed_at?: string | null
+          collected_amount?: number | null
           commission_amount?: number
           commission_gross?: number
           commission_percentage?: number
           contact_phone: string
+          courier_id?: string | null
           created_at?: string
           delivered_at?: string | null
           delivery_address?: string | null
@@ -900,24 +1240,29 @@ export type Database = {
           restaurant_rating?: number | null
           restaurant_revenue?: number
           restaurant_review?: string | null
+          settled_at?: string | null
+          settlement_id?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
           total_amount?: number
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           voucher_id?: string | null
         }
         Update: {
           accepted_at?: string | null
           alternate_phone?: string | null
+          assigned_at?: string | null
           branch_id?: string | null
           branch_lat?: number | null
           branch_lng?: number | null
           claimed_at?: string | null
+          collected_amount?: number | null
           commission_amount?: number
           commission_gross?: number
           commission_percentage?: number
           contact_phone?: string
+          courier_id?: string | null
           created_at?: string
           delivered_at?: string | null
           delivery_address?: string | null
@@ -942,11 +1287,13 @@ export type Database = {
           restaurant_rating?: number | null
           restaurant_revenue?: number
           restaurant_review?: string | null
+          settled_at?: string | null
+          settlement_id?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
           total_amount?: number
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           voucher_id?: string | null
         }
         Relationships: [
@@ -955,6 +1302,13 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_courier_id_fkey"
+            columns: ["courier_id"]
+            isOneToOne: false
+            referencedRelation: "office_couriers"
             referencedColumns: ["id"]
           },
           {
@@ -979,6 +1333,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "orders_settlement_id_fkey"
+            columns: ["settlement_id"]
+            isOneToOne: false
+            referencedRelation: "provider_settlements"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "orders_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -994,6 +1355,72 @@ export type Database = {
           },
         ]
       }
+      otp_codes: {
+        Row: {
+          attempts: number
+          code_hash: string
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          max_attempts: number
+          phone: string
+          purpose: string
+        }
+        Insert: {
+          attempts?: number
+          code_hash: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          max_attempts?: number
+          phone: string
+          purpose: string
+        }
+        Update: {
+          attempts?: number
+          code_hash?: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          max_attempts?: number
+          phone?: string
+          purpose?: string
+        }
+        Relationships: []
+      }
+      otp_rate_limits: {
+        Row: {
+          cooldown_until: string | null
+          daily_sends: number
+          daily_started_at: string
+          phone: string
+          sends_in_window: number
+          updated_at: string
+          window_started_at: string
+        }
+        Insert: {
+          cooldown_until?: string | null
+          daily_sends?: number
+          daily_started_at?: string
+          phone: string
+          sends_in_window?: number
+          updated_at?: string
+          window_started_at?: string
+        }
+        Update: {
+          cooldown_until?: string | null
+          daily_sends?: number
+          daily_started_at?: string
+          phone?: string
+          sends_in_window?: number
+          updated_at?: string
+          window_started_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           alternate_phone: string | null
@@ -1004,10 +1431,13 @@ export type Database = {
           gender: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active: boolean
+          is_available: boolean
           is_tester: boolean
           phone: string | null
+          phone_verified_at: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
+          whatsapp_opt_in: boolean
         }
         Insert: {
           alternate_phone?: string | null
@@ -1018,10 +1448,13 @@ export type Database = {
           gender?: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active?: boolean
+          is_available?: boolean
           is_tester?: boolean
           phone?: string | null
+          phone_verified_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
+          whatsapp_opt_in?: boolean
         }
         Update: {
           alternate_phone?: string | null
@@ -1032,12 +1465,91 @@ export type Database = {
           gender?: Database["public"]["Enums"]["gender_type"] | null
           id?: string
           is_active?: boolean
+          is_available?: boolean
           is_tester?: boolean
           phone?: string | null
+          phone_verified_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
+          whatsapp_opt_in?: boolean
         }
         Relationships: []
+      }
+      provider_settlements: {
+        Row: {
+          courier_id: string | null
+          created_at: string
+          created_by: string | null
+          difference: number | null
+          expected_amount: number
+          id: string
+          note: string | null
+          orders_count: number
+          period_from: string | null
+          period_to: string | null
+          provider_id: string
+          received_amount: number
+          total_collected: number
+          total_delivery_fees: number
+          total_restaurant_paid: number
+        }
+        Insert: {
+          courier_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          difference?: number | null
+          expected_amount?: number
+          id?: string
+          note?: string | null
+          orders_count?: number
+          period_from?: string | null
+          period_to?: string | null
+          provider_id: string
+          received_amount?: number
+          total_collected?: number
+          total_delivery_fees?: number
+          total_restaurant_paid?: number
+        }
+        Update: {
+          courier_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          difference?: number | null
+          expected_amount?: number
+          id?: string
+          note?: string | null
+          orders_count?: number
+          period_from?: string | null
+          period_to?: string | null
+          provider_id?: string
+          received_amount?: number
+          total_collected?: number
+          total_delivery_fees?: number
+          total_restaurant_paid?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_settlements_courier_id_fkey"
+            columns: ["courier_id"]
+            isOneToOne: false
+            referencedRelation: "office_couriers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_settlements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_settlements_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_providers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       restaurant_categories: {
         Row: {
@@ -1200,6 +1712,36 @@ export type Database = {
           name_en?: string
           self_delivery_enabled?: boolean
           updated_at?: string
+        }
+        Relationships: []
+      }
+      system_events: {
+        Row: {
+          context: Json | null
+          event: string
+          id: string
+          message: string | null
+          severity: string
+          source: string
+          ts: string
+        }
+        Insert: {
+          context?: Json | null
+          event: string
+          id?: string
+          message?: string | null
+          severity: string
+          source: string
+          ts?: string
+        }
+        Update: {
+          context?: Json | null
+          event?: string
+          id?: string
+          message?: string | null
+          severity?: string
+          source?: string
+          ts?: string
         }
         Relationships: []
       }
@@ -1399,14 +1941,231 @@ export type Database = {
           },
         ]
       }
+      wasage_verifications: {
+        Row: {
+          client_id: string | null
+          client_name: string | null
+          consumed_at: string | null
+          created_at: string
+          error: string | null
+          expires_at: string
+          id: string
+          phone: string
+          purpose: string
+          reference: string
+          requester_user_id: string | null
+          status: string
+          verified_at: string | null
+          verified_mobile: string | null
+          wasage_otp: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          client_name?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          error?: string | null
+          expires_at: string
+          id?: string
+          phone: string
+          purpose?: string
+          reference: string
+          requester_user_id?: string | null
+          status?: string
+          verified_at?: string | null
+          verified_mobile?: string | null
+          wasage_otp?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          client_name?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          error?: string | null
+          expires_at?: string
+          id?: string
+          phone?: string
+          purpose?: string
+          reference?: string
+          requester_user_id?: string | null
+          status?: string
+          verified_at?: string | null
+          verified_mobile?: string | null
+          wasage_otp?: string | null
+        }
+        Relationships: []
+      }
+      whatsapp_campaign_recipients: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          error: string | null
+          id: string
+          name: string | null
+          phone: string
+          provider_message_id: string | null
+          scheduled_for: string
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          name?: string | null
+          phone: string
+          provider_message_id?: string | null
+          scheduled_for: string
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          name?: string | null
+          phone?: string
+          provider_message_id?: string | null
+          scheduled_for?: string
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_campaigns: {
+        Row: {
+          body_template: string
+          created_at: string
+          created_by: string | null
+          daily_cap: number
+          failed_count: number
+          id: string
+          image_url: string | null
+          schedule_start_at: string
+          sent_count: number
+          status: string
+          target_filter: Json
+          target_type: string
+          title: string
+          total_recipients: number
+          updated_at: string
+        }
+        Insert: {
+          body_template: string
+          created_at?: string
+          created_by?: string | null
+          daily_cap?: number
+          failed_count?: number
+          id?: string
+          image_url?: string | null
+          schedule_start_at: string
+          sent_count?: number
+          status?: string
+          target_filter?: Json
+          target_type: string
+          title: string
+          total_recipients?: number
+          updated_at?: string
+        }
+        Update: {
+          body_template?: string
+          created_at?: string
+          created_by?: string | null
+          daily_cap?: number
+          failed_count?: number
+          id?: string
+          image_url?: string | null
+          schedule_start_at?: string
+          sent_count?: number
+          status?: string
+          target_filter?: Json
+          target_type?: string
+          title?: string
+          total_recipients?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_send_log: {
+        Row: {
+          campaign_id: string | null
+          error: string | null
+          id: string
+          phone: string
+          provider_message_id: string | null
+          purpose: string
+          sent_at: string
+          status: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          error?: string | null
+          id?: string
+          phone: string
+          provider_message_id?: string | null
+          purpose: string
+          sent_at?: string
+          status: string
+        }
+        Update: {
+          campaign_id?: string | null
+          error?: string | null
+          id?: string
+          phone?: string
+          provider_message_id?: string | null
+          purpose?: string
+          sent_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_send_log_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      _addons_json: { Args: { p_addon_ids: string[] }; Returns: Json }
       _build_cart_response: {
         Args: { p_cart_id: string; p_user_id: string }
         Returns: Json
+      }
+      _find_or_create_menu_category: {
+        Args: { p_name_ar: string; p_name_en?: string }
+        Returns: string
+      }
+      _menu_line_price: {
+        Args: {
+          p_addon_ids?: string[]
+          p_menu_item_id: string
+          p_variant_id?: string
+        }
+        Returns: number
       }
       compute_delivery_fee: {
         Args: { p_address_id: string; p_branch_id: string }
@@ -1429,17 +2188,34 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_driver: { Args: never; Returns: boolean }
+      is_online_ordering_paused: { Args: never; Returns: boolean }
       is_restaurant_owner: { Args: never; Returns: boolean }
+      is_tester: { Args: never; Returns: boolean }
+      normalize_eg_phone: { Args: { p_input: string }; Returns: string }
       notify_order_event: {
         Args: { p_event: string; p_order_id: string }
         Returns: undefined
       }
       owner_order_json: { Args: { p_order_id: string }; Returns: Json }
+      provider_spare_capacity: {
+        Args: { p_provider_id: string }
+        Returns: number
+      }
       rpc_add_to_cart: {
         Args: {
+          p_addon_ids?: string[]
           p_menu_item_id: string
           p_quantity?: number
           p_special_instructions?: string
+          p_variant_id?: string
+        }
+        Returns: Json
+      }
+      rpc_admin_attach_campaign_recipients: {
+        Args: {
+          p_campaign_id: string
+          p_custom_names?: string[]
+          p_custom_phones?: string[]
         }
         Returns: Json
       }
@@ -1457,7 +2233,29 @@ export type Database = {
         }
         Returns: Json
       }
+      rpc_admin_create_whatsapp_campaign: {
+        Args: {
+          p_body_template: string
+          p_daily_cap?: number
+          p_image_url?: string
+          p_schedule_start_at?: string
+          p_target_filter?: Json
+          p_target_type: string
+          p_title: string
+        }
+        Returns: Json
+      }
+      rpc_admin_delete_whatsapp_campaign: {
+        Args: { p_campaign_id: string }
+        Returns: Json
+      }
+      rpc_admin_dispatch_now: { Args: { p_campaign_id: string }; Returns: Json }
+      rpc_admin_get_auth_providers: { Args: never; Returns: Json }
       rpc_admin_get_campaign: { Args: { p_campaign_id: string }; Returns: Json }
+      rpc_admin_get_driver_earnings_report: {
+        Args: { p_driver_id?: string; p_from?: string; p_to?: string }
+        Returns: Json
+      }
       rpc_admin_get_financial_report: {
         Args: {
           p_from?: string
@@ -1471,8 +2269,25 @@ export type Database = {
         Args: { p_page?: number; p_page_size?: number; p_status?: string }
         Returns: Json
       }
+      rpc_admin_get_order_detail: {
+        Args: { p_order_id: string }
+        Returns: Json
+      }
       rpc_admin_get_order_history: {
         Args: { p_order_id: string }
+        Returns: Json
+      }
+      rpc_admin_get_order_releases: {
+        Args: {
+          p_from?: string
+          p_page?: number
+          p_page_size?: number
+          p_to?: string
+        }
+        Returns: Json
+      }
+      rpc_admin_get_product_analytics: {
+        Args: { p_days?: number }
         Returns: Json
       }
       rpc_admin_get_ratings: {
@@ -1485,6 +2300,15 @@ export type Database = {
         Returns: Json
       }
       rpc_admin_get_stats: { Args: never; Returns: Json }
+      rpc_admin_get_system_events: {
+        Args: {
+          p_limit?: number
+          p_severity?: string
+          p_since?: string
+          p_source?: string
+        }
+        Returns: Json
+      }
       rpc_admin_get_unclaimed_orders: { Args: never; Returns: Json }
       rpc_admin_get_working_hours: {
         Args: { p_branch_id: string }
@@ -1569,35 +2393,35 @@ export type Database = {
         }
         Returns: Json
       }
+      rpc_admin_manage_working_hours: {
+        Args: { p_branch_id: string; p_hours: Json }
+        Returns: Json
+      }
+      rpc_admin_pause_campaign: {
+        Args: { p_campaign_id: string }
+        Returns: Json
+      }
+      rpc_admin_prune_app_events: {
+        Args: { p_retention_days?: number }
+        Returns: Json
+      }
+      rpc_admin_prune_system_events: {
+        Args: { p_retention_days?: number }
+        Returns: Json
+      }
       rpc_admin_reorder_restaurants: {
         Args: { p_ordered_ids: string[] }
         Returns: Json
       }
-      rpc_get_menu_categories: { Args: never; Returns: Json }
-      rpc_admin_manage_menu_option: {
-        Args: {
-          p_action: string
-          p_allow_multiple?: boolean
-          p_id?: string
-          p_is_available?: boolean
-          p_is_required?: boolean
-          p_menu_item_id?: string
-          p_name_ar?: string
-          p_name_en?: string
-          p_option_id?: string
-          p_price_extra?: number
-          p_sort_order?: number
-        }
-        Returns: Json
-      }
-      rpc_admin_manage_working_hours: {
-        Args: { p_branch_id: string; p_hours: Json }
+      rpc_admin_resume_campaign: {
+        Args: { p_campaign_id: string }
         Returns: Json
       }
       rpc_admin_review_menu_item_request: {
         Args: { p_admin_note?: string; p_request_id: string; p_status: string }
         Returns: Json
       }
+      rpc_admin_run_named_query: { Args: { p_key: string }; Returns: Json }
       rpc_admin_send_notification: {
         Args: {
           p_body_ar: string
@@ -1611,13 +2435,51 @@ export type Database = {
         }
         Returns: Json
       }
-      rpc_admin_update_user: {
+      rpc_admin_set_ordering_status: {
+        Args: { p_enabled: boolean; p_reason_ar?: string }
+        Returns: Json
+      }
+      rpc_admin_set_tester: {
+        Args: { p_is_tester: boolean; p_user_id: string }
+        Returns: Json
+      }
+      rpc_admin_system_status_summary: {
+        Args: { p_window_minutes?: number }
+        Returns: Json
+      }
+      rpc_admin_update_order_status: {
+        Args: { p_notes?: string; p_order_id: string; p_status: string }
+        Returns: Json
+      }
+      rpc_admin_update_user:
+        | {
+            Args: {
+              p_full_name?: string
+              p_is_active?: boolean
+              p_phone?: string
+              p_role?: string
+              p_user_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_full_name?: string
+              p_is_active?: boolean
+              p_phone?: string
+              p_role?: string
+              p_user_id: string
+              p_whatsapp_opt_in?: boolean
+            }
+            Returns: Json
+          }
+      rpc_admin_upsert_delivery_provider: {
         Args: {
-          p_full_name?: string
+          p_display_name?: string
           p_is_active?: boolean
-          p_phone?: string
-          p_role?: string
-          p_user_id: string
+          p_kind?: string
+          p_max_concurrent_orders?: number
+          p_profile_id: string
         }
         Returns: Json
       }
@@ -1636,10 +2498,16 @@ export type Database = {
       }
       rpc_clear_cart: { Args: never; Returns: Json }
       rpc_customer_cancel_order: { Args: { p_order_id: string }; Returns: Json }
+      rpc_delete_my_account: { Args: never; Returns: Json }
       rpc_delete_my_address: { Args: { p_id: string }; Returns: Json }
+      rpc_dispatch_whatsapp_batch: { Args: never; Returns: undefined }
       rpc_driver_claim_order: { Args: { p_order_id: string }; Returns: Json }
       rpc_driver_get_active_orders: { Args: never; Returns: Json }
       rpc_driver_get_available_orders: {
+        Args: { p_page?: number; p_page_size?: number }
+        Returns: Json
+      }
+      rpc_driver_get_history: {
         Args: { p_page?: number; p_page_size?: number }
         Returns: Json
       }
@@ -1648,12 +2516,21 @@ export type Database = {
         Returns: Json
       }
       rpc_driver_get_stats: { Args: never; Returns: Json }
+      rpc_driver_release_order: {
+        Args: { p_order_id: string; p_reason?: string }
+        Returns: Json
+      }
+      rpc_driver_set_availability: {
+        Args: { p_is_available: boolean }
+        Returns: Json
+      }
       rpc_driver_update_order_status: {
         Args: { p_new_status: string; p_order_id: string }
         Returns: Json
       }
       rpc_get_branches: { Args: { p_restaurant_id: string }; Returns: Json }
       rpc_get_categories: { Args: never; Returns: Json }
+      rpc_get_menu_categories: { Args: never; Returns: Json }
       rpc_get_menu_items: {
         Args: {
           p_category_id?: string
@@ -1681,6 +2558,7 @@ export type Database = {
         Returns: Json
       }
       rpc_get_order_detail: { Args: { p_order_id: string }; Returns: Json }
+      rpc_get_ordering_status: { Args: never; Returns: Json }
       rpc_get_restaurant_detail: {
         Args: { p_restaurant_id: string }
         Returns: Json
@@ -1692,22 +2570,64 @@ export type Database = {
           p_is_accepting?: boolean
           p_page?: number
           p_page_size?: number
+          p_pinned_ids?: string[]
           p_search?: string
         }
         Returns: Json
       }
       rpc_get_vouchers: { Args: { p_restaurant_id: string }; Returns: Json }
+      rpc_is_phone_available: { Args: { p_phone: string }; Returns: boolean }
       rpc_list_my_addresses: { Args: never; Returns: Json }
+      rpc_log_system_event: {
+        Args: {
+          p_context?: Json
+          p_event: string
+          p_message?: string
+          p_severity: string
+          p_source: string
+        }
+        Returns: string
+      }
+      rpc_mark_campaign_if_done: {
+        Args: { p_campaign_id: string }
+        Returns: Json
+      }
       rpc_mark_notifications_read: {
         Args: { p_notification_ids?: string[] }
         Returns: Json
       }
+      rpc_office_assign_courier: {
+        Args: { p_courier_id: string; p_order_id: string }
+        Returns: Json
+      }
+      rpc_office_deactivate_courier: {
+        Args: { p_courier_id: string }
+        Returns: Json
+      }
+      rpc_office_list_couriers: { Args: never; Returns: Json }
+      rpc_office_upsert_courier: {
+        Args: {
+          p_courier_id?: string
+          p_full_name?: string
+          p_is_active?: boolean
+          p_phone?: string
+        }
+        Returns: Json
+      }
       rpc_owner_accept_order: {
-        Args: { p_order_id: string; p_prep_minutes: number }
+        Args: {
+          p_delivery_by_owner?: boolean
+          p_order_id: string
+          p_prep_minutes: number
+        }
         Returns: Json
       }
       rpc_owner_delete_menu_item: { Args: { p_item_id: string }; Returns: Json }
       rpc_owner_get_dashboard: { Args: never; Returns: Json }
+      rpc_owner_get_financial_report: {
+        Args: { p_from?: string; p_group_by?: string; p_to?: string }
+        Returns: Json
+      }
       rpc_owner_get_menu_items: { Args: never; Returns: Json }
       rpc_owner_get_orders: {
         Args: { p_page?: number; p_page_size?: number; p_status?: string }
@@ -1826,6 +2746,36 @@ export type Database = {
         Returns: Json
       }
       rpc_owner_upsert_menu_item: { Args: { p_item: Json }; Returns: Json }
+      rpc_provider_courier_orders: {
+        Args: { p_courier_id?: string; p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      rpc_provider_delivery_report: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      rpc_provider_get_unsettled: {
+        Args: { p_courier_id?: string }
+        Returns: Json
+      }
+      rpc_provider_list_settlements: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
+      rpc_provider_record_collection: {
+        Args: { p_amount: number; p_order_id: string }
+        Returns: Json
+      }
+      rpc_provider_settle: {
+        Args: {
+          p_courier_id?: string
+          p_from?: string
+          p_note?: string
+          p_received_amount?: number
+          p_to?: string
+        }
+        Returns: Json
+      }
       rpc_rate_order: {
         Args: { p_order_id: string; p_rating: number; p_review?: string }
         Returns: Json
@@ -1834,14 +2784,22 @@ export type Database = {
         Args: { p_platform: string; p_token: string }
         Returns: Json
       }
+      rpc_remove_alternate_phone: { Args: never; Returns: Json }
       rpc_remove_cart_item: { Args: { p_cart_item_id: string }; Returns: Json }
+      rpc_retry_failed_recipients: {
+        Args: { p_campaign_id: string }
+        Returns: Json
+      }
       rpc_set_default_address: { Args: { p_id: string }; Returns: Json }
+      rpc_track_events: { Args: { p_events: Json }; Returns: Json }
       rpc_unregister_device_token: { Args: { p_token: string }; Returns: Json }
       rpc_update_cart_item: {
         Args: {
+          p_addon_ids?: string[]
           p_cart_item_id: string
           p_quantity: number
           p_special_instructions?: string
+          p_variant_id?: string
         }
         Returns: Json
       }
@@ -2053,6 +3011,7 @@ export const Constants = {
   },
 } as const
 
+
 // ──────────────────────────────────────────────────────────────
 // Convenience aliases derived from the generated Database type.
 // Add new aliases here as the codebase needs them.
@@ -2130,5 +3089,16 @@ export type UserFavorite = TableRow<"user_favorite_restaurants">;
 export type OrderStatusHistory = TableRow<"order_status_history">;
 export type BranchWorkingHours = TableRow<"branch_working_hours">;
 export type BranchWorkingHoursInsert = TableInsert<"branch_working_hours">;
-export type MenuItemOption = TableRow<"menu_item_options">;
-export type MenuItemOptionChoice = TableRow<"menu_item_option_choices">;
+
+// Menu item variants + add-on catalogue (migration 074).
+export type MenuItemVariant = TableRow<"menu_item_variants">;
+export type MenuItemVariantInsert = TableInsert<"menu_item_variants">;
+export type MenuItemVariantUpdate = TableUpdate<"menu_item_variants">;
+
+export type MenuAddonGroup = TableRow<"menu_addon_groups">;
+export type MenuAddonGroupInsert = TableInsert<"menu_addon_groups">;
+export type MenuAddonGroupUpdate = TableUpdate<"menu_addon_groups">;
+
+export type MenuAddon = TableRow<"menu_addons">;
+export type MenuAddonInsert = TableInsert<"menu_addons">;
+export type MenuAddonUpdate = TableUpdate<"menu_addons">;
