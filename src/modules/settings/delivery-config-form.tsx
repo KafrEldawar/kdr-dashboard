@@ -22,6 +22,7 @@ import { toAppError } from "@/lib/errors";
 const schema = z.object({
   base: z.coerce.number().min(0),
   per_km: z.coerce.number().min(0),
+  free_km: z.coerce.number().min(0).max(50),
   min: z.coerce.number().min(0),
   max: z.coerce.number().min(0),
   route_factor: z.coerce.number().min(0.5).max(5),
@@ -87,6 +88,12 @@ export function DeliveryConfigForm() {
           >
             <Field label="الرسوم الأساسية (جنيه)" name="base" form={form} />
             <Field label="سعر الكيلومتر (جنيه)" name="per_km" form={form} />
+            <Field
+              label="كيلومترات مشمولة في السعر الأساسي"
+              name="free_km"
+              form={form}
+              step="0.5"
+            />
             <Field label="الحد الأدنى (جنيه)" name="min" form={form} />
             <Field label="الحد الأقصى (جنيه)" name="max" form={form} />
             <Field
@@ -128,7 +135,11 @@ export function DeliveryConfigForm() {
                 </p>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                المعادلة: clamp(min, max, base + per_km × distance × route_factor)
+                المعادلة: clamp(min, max, base + per_km × max(0, distance ×
+                route_factor − free_km))
+                <br />
+                يعني أول <b>free_km</b> كيلو داخلة في السعر الأساسي، واللي بعدها
+                بس هو اللي بيتحسب.
               </p>
             </div>
 

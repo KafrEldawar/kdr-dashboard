@@ -3,6 +3,10 @@ import { requireSupabase } from "@/lib/supabase/client";
 export type DeliveryFeeConfig = {
   base: number;
   per_km: number;
+  /// Kilometres included in `base` before `per_km` starts billing
+  /// (migration 078). 0 reproduces the pre-078 "bill from the first metre"
+  /// behaviour, which is what a config saved by an older dashboard means.
+  free_km: number;
   min: number;
   max: number;
   route_factor: number;
@@ -11,10 +15,11 @@ export type DeliveryFeeConfig = {
 };
 
 export const DEFAULT_DELIVERY_CONFIG: DeliveryFeeConfig = {
-  base: 10,
-  per_km: 3,
-  min: 10,
-  max: 60,
+  base: 20,
+  per_km: 5,
+  free_km: 2,
+  min: 20,
+  max: 85,
   route_factor: 1.3,
   max_distance_km: 15,
   currency: "EGP",
@@ -87,10 +92,14 @@ export const settingsService = {
 
   /// Returns the predicted fee for a hypothetical distance — useful for the
   /// live preview shown next to the form.
+  /// Must stay in lockstep with `compute_delivery_fee` (migration 078).
+  /// The first `free_km` of the routed distance are included in `base`;
+  /// only the surplus is billed.
   previewFee(config: DeliveryFeeConfig, distanceKm: number): number {
     const routed = distanceKm * config.route_factor;
     if (routed > config.max_distance_km) return 0;
-    const raw = config.base + config.per_km * routed;
+    const billable = Math.max(routed - (config.free_km ?? 0), 0);
+    const raw = config.base + config.per_km * billable;
     return Math.max(config.min, Math.min(config.max, raw));
   },
 };
