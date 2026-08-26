@@ -3,24 +3,66 @@
  *
  * Rules:
  *   • A "window" is the 10-minute rolling window that gates the
- *     short-burst send count. After 3 sends inside one window, the
- *     phone is on cooldown until window_started_at + 10 min.
+ *     short-burst send count. After MAX_SENDS_PER_WINDOW sends inside
+ *     one window, the phone is on cooldown for the rest of that window
+ *     — but never for less than MIN_COOLDOWN_MS (see below).
  *   • Independently, a 24-hour rolling daily counter hard-caps the
- *     phone at 6 sends per day.
+ *     phone at MAX_SENDS_PER_DAY sends per day.
  *
  * The check + increment is done in a single round trip via an upsert
  * that reads the existing row, resets stale counters, and writes the
  * new state. Concurrency: races between two near-simultaneous send
  * attempts can in the worst case let through one extra send — that's
  * acceptable for OTP throttling and avoids a Postgres advisory lock.
+ *
+ * ── Limits are env-tunable (2026-08-26) ───────────────────────────
+ * The daily cap was 6, which is far too tight for the wasage flow:
+ * verification there depends on the *user* sending a token from their
+ * own WhatsApp, and roughly a third of numbers need several attempts
+ * before one lands. A 30-day audit found people burning all 6 in under
+ * half an hour and then being locked out for a full 24 hours — the cap
+ * was turning a fumbled attempt into a day-long lockout. Raised to 15,
+ * with the burst guard bumped 3 → 4.
+ *
+ * Both are overridable via env so they can be retuned from the
+ * dashboard without a redeploy:
+ *   OTP_MAX_SENDS_PER_WINDOW   (default 4)
+ *   OTP_MAX_SENDS_PER_DAY      (default 15)
+ *   OTP_WINDOW_MINUTES         (default 10)
+ * Garbage or out-of-range values fall back to the default rather than
+ * disabling the limiter — a typo in an env var must never leave OTP
+ * issuance wide open.
  */
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const WINDOW_MS = 10 * 60 * 1000; // 10 min
+/** Read a positive integer from env, clamped to [min, max]. */
+function envInt(name: string, fallback: number, min: number, max: number): number {
+  const raw = Deno.env.get(name);
+  if (!raw) return fallback;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min || n > max) return fallback;
+  return n;
+}
+
+const WINDOW_MS = envInt("OTP_WINDOW_MINUTES", 10, 1, 120) * 60 * 1000;
 const DAILY_MS  = 24 * 60 * 60 * 1000;
-const MAX_SENDS_PER_WINDOW = 3;
-const MAX_SENDS_PER_DAY    = 6;
+const MAX_SENDS_PER_WINDOW = envInt("OTP_MAX_SENDS_PER_WINDOW", 4, 1, 50);
+const MAX_SENDS_PER_DAY    = envInt("OTP_MAX_SENDS_PER_DAY", 15, 1, 200);
+
+/**
+ * Floor on a burst cooldown.
+ *
+ * The cooldown used to be pinned to `window_started_at + WINDOW_MS` —
+ * the end of the current window. That is *usually* right, but when the
+ * capping send lands near the end of a window the cooldown is born
+ * already expired, so the burst guard silently doesn't bite and the
+ * only thing left standing between a hammering client and the sender
+ * is the daily cap. Clamping to at least this much time from now keeps
+ * the original "wait out the window" intent while guaranteeing the
+ * cooldown is always a real one.
+ */
+const MIN_COOLDOWN_MS = 2 * 60 * 1000;
 
 export interface RateLimitDecision {
   allowed: boolean;
@@ -106,10 +148,13 @@ export async function checkAndIncrement(
   row.sends_in_window += 1;
   row.daily_sends     += 1;
 
-  // If we just hit the burst cap, set cooldown for the rest of the window.
+  // If we just hit the burst cap, sit out the rest of the window — but
+  // never less than MIN_COOLDOWN_MS, so a send that caps a nearly-spent
+  // window still produces a cooldown that is actually in the future.
   if (row.sends_in_window >= MAX_SENDS_PER_WINDOW) {
+    const windowEnds = new Date(row.window_started_at).getTime() + WINDOW_MS;
     row.cooldown_until = new Date(
-      new Date(row.window_started_at).getTime() + WINDOW_MS,
+      Math.max(windowEnds, now + MIN_COOLDOWN_MS),
     ).toISOString();
   }
 
