@@ -139,8 +139,12 @@ function VoucherFormFields({
           <Input {...form.register("min_order_amount")} type="number" min={0} />
         </FormField>
 
-        <FormField label="حد الاستخدام (فارغ = غير محدود)">
+        <FormField label="حد الاستخدام الكلي (فارغ = غير محدود)">
           <Input {...form.register("usage_limit")} type="number" min={1} placeholder="∞" />
+          {/* Enforced server-side by rpc_validate_voucher / rpc_checkout (081). */}
+          <p className="text-xs text-muted-foreground">
+            كل عميل يقدر يستخدم الكود مرة واحدة بس. الطلب اللي يتلغي أو يترفض بيرجّع له الاستخدام.
+          </p>
         </FormField>
 
         <FormField label="صالح من">
