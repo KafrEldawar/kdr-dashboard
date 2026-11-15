@@ -26,6 +26,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { toAppError } from "@/lib/errors";
+import { adminFetch } from "@/lib/admin-fetch";
 
 type SessionStatus = {
   connected: boolean;
@@ -39,14 +40,14 @@ type SessionStatus = {
 };
 
 async function fetchStatus(): Promise<SessionStatus> {
-  const res = await fetch("/api/whatsapp/session?action=status", { cache: "no-store" });
+  const res = await adminFetch("/api/whatsapp/session?action=status", { cache: "no-store" });
   const body = await res.json();
   if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
   return body as SessionStatus;
 }
 
 async function postAction(action: "restart" | "wipe"): Promise<void> {
-  const res = await fetch(`/api/whatsapp/session?action=${action}`, { method: "POST" });
+  const res = await adminFetch(`/api/whatsapp/session?action=${action}`, { method: "POST" });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
 }
@@ -89,7 +90,7 @@ export function WhatsappConnectionModule() {
       <PageHeader
         icon={MessageCircle}
         title="اتصال واتساب"
-        description="امسح كود QR لربط رقم واتساب الخاص بالخدمة. يُستخدم لإرسال رموز OTP والحملات التسويقية."
+        description="امسح كود QR لربط رقم واتساب الخاص بخدمة الإرسال القديمة (Railway). مبقاش بيستخدم لرموز تسجيل الدخول."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -112,6 +113,20 @@ export function WhatsappConnectionModule() {
           </div>
         }
       />
+
+      {/* The Railway/Baileys sender was retired in July 2026 (WhatsApp Web
+          ban risk). Login codes moved to wasage, so this page no longer
+          affects login — say so, or ops will try to "fix login" here. */}
+      <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm leading-6">
+        <p className="font-semibold text-amber-700 dark:text-amber-400">
+          خدمة الإرسال دي (Railway / واتساب ويب) متوقفة ومش مستخدمة لتسجيل الدخول
+        </p>
+        <p className="text-muted-foreground">
+          رموز تسجيل الدخول بتشتغل دلوقتي عن طريق wasage (العميل بيبعت الرمز من واتساب بتاعه)،
+          مع بديل SMS لما يتفعّل. حالتها الحقيقية في صفحة «حالة الأنظمة».
+          الحملات التسويقية برضه بتعتمد على الخدمة القديمة دي، فمش هتتبعت لحد ما يتوفر مزوّد جديد.
+        </p>
+      </div>
 
       <AlertDialog open={confirmWipe} onOpenChange={setConfirmWipe}>
         <AlertDialogContent>

@@ -26,6 +26,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { timingSafeEqual } from "node:crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,13 @@ type Payload = {
   message?:  string;
   context?:  Record<string, unknown>;
 };
+
+/** Constant-time compare so the shared token can't be guessed by timing. */
+function sameSecret(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
 
 export async function POST(request: Request) {
   const expected = process.env.SYSTEM_EVENTS_TOKEN;
@@ -48,7 +56,7 @@ export async function POST(request: Request) {
 
   const auth = request.headers.get("authorization") ?? "";
   const token = auth.replace(/^Bearer\s+/i, "").trim();
-  if (!token || token !== expected) {
+  if (!token || !sameSecret(token, expected)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
