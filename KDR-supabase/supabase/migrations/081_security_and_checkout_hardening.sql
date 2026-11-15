@@ -20,9 +20,9 @@
 --   6. A voucher can be used once per customer (rpc_validate_voucher +
 --      rpc_checkout). A cancelled / rejected order doesn't count.
 --
--- How to apply: Supabase MCP `apply_migration` (or `supabase db query
--- --linked -f`), project rkhygtgmcurwemuzizep. Verification queries are at
--- the bottom of this file.
+-- APPLIED to production (rkhygtgmcurwemuzizep) on 2026-11-15 via the
+-- dashboard SQL editor in one transaction; ledger version 20261115120000.
+-- Verification queries are at the bottom of this file.
 -- ============================================================
 
 

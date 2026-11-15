@@ -117,9 +117,15 @@ backend, new app ↔ old backend), but this order is the safe one.
 1. **Supabase access.** `supabase projects list` must show
    `rkhygtgmcurwemuzizep`. On 2026-11-14 the CLI and the MCP connector were
    logged into a personal account that couldn't see it. Fix that first.
-2. **Migration 081**: MCP `apply_migration` with the file contents (or
-   `supabase db query --linked -f supabase/migrations/081_security_and_checkout_hardening.sql`).
-   Then run the verification queries at the bottom of the file.
+2. ~~**Migration 081**~~ — ✅ **APPLIED to production on 2026-11-15** from the
+   dashboard SQL editor, as one transaction, and recorded in
+   `supabase_migrations.schema_migrations` as `20261115120000 /
+   081_security_and_checkout_hardening`. Verified afterwards: the four
+   policies are gone, both triggers and the index exist, the privileges are as
+   intended, and all seven function bodies hash-match the file. (The editor
+   auto-closes brackets on multi-line input, so the migration was sent as one
+   line with comments stripped; the identical text passed the PGlite suite
+   first.)
 3. **Edge functions** (the files now use `../_shared`, so the CLI works):
    ```bash
    cd KDR/KDR-supabase
