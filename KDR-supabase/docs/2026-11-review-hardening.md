@@ -132,7 +132,15 @@ backend, new app ↔ old backend), but this order is the safe one.
    auto-closes brackets on multi-line input, so the migration was sent as one
    line with comments stripped; the identical text passed the PGlite suite
    first.)
-3. **Edge functions** (the files now use `../_shared`, so the CLI works):
+3. ✅ **Edge functions DEPLOYED 2026-11-15**: wasage-complete v3, verify-otp v10,
+   send-otp v11, send-push v20, whatsapp-webhook v4. JWT settings were
+   preserved (verify-otp / send-otp / whatsapp-webhook off; the rest on). Before
+   deploying, the live sources were downloaded and diffed against the repo: no
+   live-only logic was overwritten (verify-otp differed in comments only).
+   Smoke-tested afterwards with harmless inputs. Not yet exercised live: a
+   successful wasage login through the new magic-link minting, because wasage
+   itself is down. Commands, for the record (the files now use `../_shared`,
+   so the CLI works):
    ```bash
    cd KDR/KDR-supabase
    supabase functions deploy wasage-complete verify-otp send-otp send-push --project-ref rkhygtgmcurwemuzizep
