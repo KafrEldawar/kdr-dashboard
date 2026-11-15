@@ -22,6 +22,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toAppError } from "@/lib/errors";
+import { adminFetch } from "@/lib/admin-fetch";
 
 type ServiceStatus = "ok" | "degraded" | "down" | "unconfigured";
 
@@ -45,7 +46,7 @@ type SystemEvent = {
 type StatusResponse = {
   ts:        string;
   services:  {
-    whatsapp:      ServiceReport;
+    otp:           ServiceReport;
     supabase:      ServiceReport;
     edgeFunctions: ServiceReport;
   };
@@ -59,7 +60,7 @@ type StatusResponse = {
 };
 
 async function fetchStatus(): Promise<StatusResponse> {
-  const res = await fetch("/api/status", { cache: "no-store" });
+  const res = await adminFetch("/api/status", { cache: "no-store" });
   const body = await res.json();
   if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
   return body as StatusResponse;
@@ -210,7 +211,7 @@ export function StatusModule() {
         <div className="space-y-6">
           {/* Service cards */}
           <div className="grid gap-4 md:grid-cols-3">
-            <StatusCard title="واتساب سيندر"    icon={MessageCircle} report={data.services.whatsapp} />
+            <StatusCard title="تسجيل الدخول (واتساب)" icon={MessageCircle} report={data.services.otp} />
             <StatusCard title="Supabase"        icon={Database}      report={data.services.supabase} />
             <StatusCard title="Edge Functions" icon={Cloud}         report={data.services.edgeFunctions} />
           </div>
