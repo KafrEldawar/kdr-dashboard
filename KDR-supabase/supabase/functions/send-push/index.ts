@@ -166,7 +166,11 @@ async function handleOrderEvent(
     });
   } else if (event === "order_available") {
     // New delivery order accepted by the restaurant → notify every driver
-    const driverTokens = await getTargetTokens(supabase, "custom", { role: "driver" });
+    // who could actually claim it (available, not suspended, spare capacity).
+    const driverTokens = await withSpareCapacity(
+      supabase,
+      await getTargetTokens(supabase, "custom", { role: "driver" }),
+    );
     console.log(`[send-push] driver tokens: ${driverTokens.length}`);
     const title = "طلب توصيل جديد";
     const body = `طلب جديد متاح للاستلام بقيمة ${order.total_amount}`;
@@ -218,7 +222,10 @@ async function handleOrderEvent(
         extra_data: { order_id: orderId, event },
       });
     } else {
-      const driverTokens = await getTargetTokens(supabase, "custom", { role: "driver" });
+      const driverTokens = await withSpareCapacity(
+        supabase,
+        await getTargetTokens(supabase, "custom", { role: "driver" }),
+      );
       const { sent, failed } = await sendFcmBatch(
         supabase,
         driverTokens.map((t) => t.token),
@@ -377,6 +384,56 @@ async function getTargetTokens(
 
   const { data } = await query;
   return (data ?? []) as { token: string; user_id: string }[];
+}
+
+/**
+ * Drops pool pushes for accounts that could not claim the order anyway:
+ * a rider already on a delivery, or an office at its `max_concurrent_orders`.
+ * They were getting "new order" alerts they could only dismiss.
+ *
+ * Mirrors `provider_spare_capacity()` (migration 067): capacity comes from
+ * `delivery_providers` (default 1 when the row is missing), and "active" is
+ * preparing / ready_for_pickup / out_for_delivery. Suspended providers
+ * (`is_active = false`) are skipped too. Fails open — if either lookup
+ * errors, everyone still gets the push: noisy beats silent for new orders.
+ */
+async function withSpareCapacity(
+  supabase: ReturnType<typeof createClient>,
+  tokens: { token: string; user_id: string }[],
+): Promise<{ token: string; user_id: string }[]> {
+  const ids = [...new Set(tokens.map((t) => t.user_id))];
+  if (ids.length === 0) return tokens;
+
+  const [providersRes, activeRes] = await Promise.all([
+    supabase
+      .from("delivery_providers")
+      .select("id, max_concurrent_orders, is_active")
+      .in("id", ids),
+    supabase
+      .from("orders")
+      .select("driver_id")
+      .in("driver_id", ids)
+      .in("status", ["preparing", "ready_for_pickup", "out_for_delivery"]),
+  ]);
+  if (providersRes.error || activeRes.error) return tokens;
+
+  const capacity = new Map<string, number>();
+  const suspended = new Set<string>();
+  for (const p of (providersRes.data ?? []) as {
+    id: string; max_concurrent_orders: number | null; is_active: boolean | null;
+  }[]) {
+    capacity.set(p.id, p.max_concurrent_orders ?? 1);
+    if (p.is_active === false) suspended.add(p.id);
+  }
+  const active = new Map<string, number>();
+  for (const o of (activeRes.data ?? []) as { driver_id: string }[]) {
+    active.set(o.driver_id, (active.get(o.driver_id) ?? 0) + 1);
+  }
+
+  return tokens.filter((t) =>
+    !suspended.has(t.user_id) &&
+    (capacity.get(t.user_id) ?? 1) - (active.get(t.user_id) ?? 0) > 0
+  );
 }
 
 async function getUserTokens(supabase: ReturnType<typeof createClient>, userId: string): Promise<string[]> {
