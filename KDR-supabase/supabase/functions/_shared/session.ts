@@ -1,7 +1,7 @@
 /**
  * Phone → session logic, shared by every function that finishes a phone
- * verification: verify-otp (push code), wasage-complete (user-initiated
- * WhatsApp) and firebase-phone-complete (SMS fallback). A verified phone
+ * verification: verify-otp (push code) and wasage-complete (user-initiated
+ * WhatsApp). A verified phone
  * always produces the same account and the same session, whichever
  * provider proved ownership.
  *

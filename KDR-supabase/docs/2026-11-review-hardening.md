@@ -28,16 +28,22 @@ attempts: wasage isn't calling back. Other live facts behind this work: 265
 auth users (past the old 200-user lookup), 43 of 49 branches without a map
 pin, and one customer who used the same voucher twice.
 
-What we changed so a wasage outage stops locking people out:
+What we changed on our side. None of it can fix a wasage outage, which only wasage can do; these changes make the flow sturdier and the outage visible:
 
 | Where | Change |
 |---|---|
 | App, `OtpCubit` + `WasagePendingStore` | The pending verification is saved to disk. If Android kills the app while the user is in WhatsApp, the login / phone-entry screen picks it up and finishes it. Before, wasage's confirmation landed on a row nobody would ever claim. |
 | App, `WasageWaitScreen` | Polls the moment the app returns to the foreground (iOS froze the 2s timer). Shows the token and the wasage number with a copy button for when WhatsApp opens without the pre-filled text. |
-| App + new edge fn `firebase-phone-complete` | **SMS fallback**: "مجاليش رد؟ أكّد برسالة SMS". Firebase phone auth sends a 6-digit SMS; the Firebase ID token is verified server-side (Google JWKS, project, `phone` provider, signed in within 10 min) and the session is minted by the same code wasage uses. Off until Firebase is set up — Remote Config `otp_sms_fallback_enabled`. |
-| Dashboard `/status` | The dead Railway "WhatsApp sender" card is replaced by a **login health** card computed from `wasage_verifications`: success rate, "no reply from wasage", wrong-number, SMS fallbacks, last successful login. It turns red when nobody has verified in the last hour. |
+| Dashboard `/status` | The dead Railway "WhatsApp sender" card is replaced by a **login health** card computed from `wasage_verifications`: success rate, "no reply from wasage", wrong-number, last successful login. It turns red when nobody has verified in the last hour. |
 
-### 2. Account/session bugs (`_shared/session.ts`, used by verify-otp, wasage-complete, firebase-phone-complete)
+> **SMS fallback — removed, pending a product decision (2026-11-15).** A
+> Firebase phone-auth fallback was built (app button + `firebase-phone-complete`
+> edge function) and then taken out at the owner's request before it shipped.
+> The full implementation is in git history if it's wanted later: KDR commit
+> `94277e4` (edge function + token verifier + tests) and mobile commit
+> `06b0c08` (app side; removed again in the commit after it).
+
+### 2. Account/session bugs (`_shared/session.ts`, used by verify-otp and wasage-complete)
 
 - **Owners and drivers lost their password** if they ever used the phone
   card: signing in reset the account password to a random value. Sessions
@@ -129,25 +135,14 @@ backend, new app ↔ old backend), but this order is the safe one.
 3. **Edge functions** (the files now use `../_shared`, so the CLI works):
    ```bash
    cd KDR/KDR-supabase
-   supabase secrets set FIREBASE_PROJECT_ID=restaurants-b1d28
-   supabase functions deploy wasage-complete verify-otp send-otp send-push whatsapp-webhook
-   supabase functions deploy firebase-phone-complete
+   supabase functions deploy wasage-complete verify-otp send-otp send-push --project-ref rkhygtgmcurwemuzizep
+   supabase functions deploy whatsapp-webhook --no-verify-jwt --project-ref rkhygtgmcurwemuzizep
    ```
-   `firebase-phone-complete` keeps JWT verification **on**, like `wasage-complete`.
-   `send-otp` also picks up the 4/15 rate limits it was still missing.
+   `whatsapp-webhook` is public (Meta calls it), so it must keep JWT
+   verification off. `send-otp` also picks up the 4/15 rate limits it was
+   still missing.
 4. **Dashboard**: deploy `fix/review-hardening-2026-11` as usual. No new env vars.
-5. **Mobile**: release as usual (`flutter pub get`, `cd ios && pod install`).
-   The SMS button stays hidden until step 6.
-6. **Firebase phone auth** (only when you want the SMS fallback):
-   1. Firebase console → Authentication → Sign-in method → enable **Phone**.
-   2. Project on the **Blaze** plan (SMS is billed per message; check the
-      Egypt rate in the pricing page and set a budget alert).
-   3. Android app → add the **SHA-1 and SHA-256** of the upload key *and*
-      of the Play App Signing key (Play Console → App integrity).
-   4. iOS → Cloud Messaging → APNs auth key uploaded (silent-push
-      verification; the reCAPTCHA URL scheme is already in `Info.plist`).
-   5. Test on a real Android and iPhone, then set Remote Config
-      `otp_sms_fallback_enabled = true` and publish.
+5. **Mobile**: release as usual. No new native dependencies.
 
 ## Verify after deploy
 
@@ -164,13 +159,14 @@ backend, new app ↔ old backend), but this order is the safe one.
 
 ## Rollback
 
-- Edge functions: redeploy the previous version from the Supabase
-  dashboard (Functions → versions).
+- Edge functions: check the function out from the commit before `b090d4a`
+  and deploy it. Its `send-otp`, `verify-otp` and `whatsapp-webhook` import
+  `./_shared/…` (the old MCP bundle layout), so change that to `../_shared/…`
+  first or the CLI can't bundle it.
 - Migration 081, per section: re-run `rpc_checkout` from 078 and
   `rpc_update_profile` from 051; `drop trigger trg_profiles_guard_privileged_columns on profiles;`
   `drop trigger trg_orders_release_voucher on orders;`. Don't restore the
   dropped policies: they were the holes.
-- SMS fallback: Remote Config `otp_sms_fallback_enabled = false`, no release needed.
 
 ## Wasage: what to check on their side
 

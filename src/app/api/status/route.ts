@@ -77,7 +77,7 @@ async function probeOtp(): Promise<ServiceReport> {
     const now = Date.now();
     const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
 
-    const [rowsRes, lastOkRes, smsRes] = await withTimeout(
+    const [rowsRes, lastOkRes] = await withTimeout(
       Promise.all([
         client
           .from("wasage_verifications")
@@ -90,12 +90,6 @@ async function probeOtp(): Promise<ServiceReport> {
           .in("status", ["verified", "consumed"])
           .order("verified_at", { ascending: false, nullsFirst: false })
           .limit(1),
-        client
-          .from("system_events")
-          .select("id", { head: true, count: "exact" })
-          .eq("source", "otp")
-          .eq("event", "sms_fallback_completed")
-          .gte("ts", since24h),
       ]),
       PROBE_TIMEOUT_MS,
       "otp",
@@ -129,12 +123,10 @@ async function probeOtp(): Promise<ServiceReport> {
       ? new Date(lastOk).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" })
       : "مفيش";
     const rate = day.total ? Math.round((day.ok / day.total) * 100) : null;
-    const sms = smsRes.count ?? 0;
     const detail =
       `آخر 24 ساعة: ${day.ok} من ${day.total} أكدوا (${rate ?? "—"}%) · ` +
       `بدون رد من wasage: ${day.noReply} · رقم مختلف: ${day.mismatch}` +
       (day.failed ? ` · فشل الفتح: ${day.failed}` : "") +
-      (sms ? ` · عبر SMS: ${sms}` : "") +
       ` · آخر تأكيد ناجح: ${lastOkLabel}`;
 
     if (hour.failed > 0 && hour.ok === 0) {

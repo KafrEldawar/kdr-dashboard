@@ -8,7 +8,7 @@
  * The end user never sees the email.
  *
  * The account resolution and session minting live in _shared/session.ts
- * (shared with wasage-complete and firebase-phone-complete) — this file
+ * (shared with wasage-complete) — this file
  * only checks the code.
  *
  * Uniqueness contract (post-051): a phone number can belong to at most
@@ -101,8 +101,8 @@ Deno.serve(async (req) => {
     }
 
     // ── Signup / phone-first sign-in branch ──────────────────────
-    // Same account resolution + session minting as wasage-complete and
-    // firebase-phone-complete (see _shared/session.ts).
+    // Same account resolution + session minting as wasage-complete
+    // (see _shared/session.ts).
     const res = await mintSessionForPhone(svc, phone);
     if (!res.ok) {
       const status = res.reason === "phone_in_use" ? 409 : 500;
