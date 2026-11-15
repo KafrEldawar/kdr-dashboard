@@ -5,6 +5,8 @@
  *
  * Why proxy:
  *   • WA_ADMIN_TOKEN must never reach the browser.
+ *   • Admin-only: every call must carry an admin's Supabase token
+ *     (requireAdmin) — `wipe` destroys the paired session.
  *   • Avoids CORS round-trip on the WhatsApp page.
  *
  * Required env (server-only):
@@ -13,6 +15,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/server/require-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +29,9 @@ function railwayConfig() {
 }
 
 export async function GET(request: Request) {
+  const denied = await requireAdmin(request);
+  if (denied) return denied;
+
   const cfg = railwayConfig();
   if ("error" in cfg) return NextResponse.json({ error: cfg.error }, { status: 500 });
 
@@ -54,6 +60,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // restart / wipe kill the sender's WhatsApp session — admins only.
+  const denied = await requireAdmin(request);
+  if (denied) return denied;
+
   const cfg = railwayConfig();
   if ("error" in cfg) return NextResponse.json({ error: cfg.error }, { status: 500 });
 

@@ -22,8 +22,21 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const supabase = requireSupabase();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+
+      // Owners and drivers have email + password accounts too — refuse
+      // them here instead of letting them into the admin UI.
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      if (profile?.role !== "admin") {
+        await supabase.auth.signOut();
+        throw new Error("الحساب ده مالوش صلاحية دخول لوحة التحكم.");
+      }
+
       toast.success("تم تسجيل الدخول");
       router.push("/");
       router.refresh();

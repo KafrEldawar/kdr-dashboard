@@ -6,9 +6,10 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Edit, Trash2, Plus, Phone } from "lucide-react";
+import { Edit, Trash2, Plus, Phone, MapPinOff } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -212,12 +213,28 @@ function BranchFormFields({
   );
 }
 
+/**
+ * A branch without coordinates can't be used for delivery: rpc_checkout
+ * and compute_delivery_fee refuse it (`branch_needs_pin`, migration 078),
+ * so its restaurant is pickup-only from that branch. Most branches were
+ * imported without a pin, so the page surfaces them instead of leaving it
+ * to customers to discover at checkout.
+ */
+function hasMapPin(b: Branch): boolean {
+  const { lat, lng } = b as Branch & { lat?: number | null; lng?: number | null };
+  return (
+    typeof lat === "number" && typeof lng === "number" &&
+    Math.abs(lat) > 0.0001 && Math.abs(lng) > 0.0001
+  );
+}
+
 export function BranchesModule() {
   const queryClient = useQueryClient();
   const t = useTranslations();
   const locale = useLocale();
 
   const [search, setSearch] = useState("");
+  const [missingPinOnly, setMissingPinOnly] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [deletingBranch, setDeletingBranch] = useState<Branch | null>(null);
@@ -226,7 +243,9 @@ export function BranchesModule() {
 
   const branchesQuery = useQuery({
     queryKey: ["branches", debouncedSearch],
-    queryFn: () => branchesService.getAll({ search: debouncedSearch, pageSize: 50 }),
+    // The table has no pager: fetch every branch (there are a few dozen)
+    // so none silently falls off the end of a 50-row page.
+    queryFn: () => branchesService.getAll({ search: debouncedSearch, pageSize: 500 }),
   });
 
   const restaurantsQuery = useQuery({
@@ -343,12 +362,22 @@ export function BranchesModule() {
       {
         accessorKey: "location_url",
         header: "الموقع",
-        cell: ({ row }) =>
-          row.original.location_url ? (
-            <a href={row.original.location_url} target="_blank" rel="noreferrer" className="text-primary underline">
-              خريطة
-            </a>
-          ) : "—",
+        cell: ({ row }) => (
+          <div className="flex flex-wrap items-center gap-2">
+            {hasMapPin(row.original) ? (
+              <Badge variant="success">مثبّت على الخريطة</Badge>
+            ) : (
+              <Badge variant="destructive" title="التوصيل من الفرع ده متوقف لحد ما يتحدد موقعه">
+                بدون موقع — التوصيل متوقف
+              </Badge>
+            )}
+            {row.original.location_url ? (
+              <a href={row.original.location_url} target="_blank" rel="noreferrer" className="text-primary underline">
+                خريطة
+              </a>
+            ) : null}
+          </div>
+        ),
       },
       {
         id: "actions",
@@ -390,6 +419,12 @@ export function BranchesModule() {
     [t, locale, editForm, restaurants]
   );
 
+  const allBranches = branchesQuery.data?.data ?? [];
+  const missingPinCount = allBranches.filter((b) => !hasMapPin(b)).length;
+  const visibleBranches = missingPinOnly
+    ? allBranches.filter((b) => !hasMapPin(b))
+    : allBranches;
+
   return (
     <>
       <PageHeader
@@ -402,6 +437,29 @@ export function BranchesModule() {
           </Button>
         }
       />
+
+      {missingPinCount > 0 ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+          <div className="flex items-start gap-3">
+            <MapPinOff className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+            <div className="text-sm">
+              <p className="font-semibold text-destructive">
+                {missingPinCount} من {allBranches.length} فرع مالهمش موقع على الخريطة
+              </p>
+              <p className="text-muted-foreground">
+                التوصيل من الفروع دي متوقف لحد ما يتحدد موقعها — افتح «تعديل» وحدد الدبوس على الخريطة.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant={missingPinOnly ? "default" : "outline"}
+            onClick={() => setMissingPinOnly((v) => !v)}
+          >
+            {missingPinOnly ? "اعرض كل الفروع" : "اعرض الفروع اللي ناقصها موقع"}
+          </Button>
+        </div>
+      ) : null}
 
       <div className="mb-4 rounded-lg border bg-background p-4">
         <SearchInput value={search} onChange={setSearch} placeholder={t("branches.searchPlaceholder")} />
@@ -417,7 +475,7 @@ export function BranchesModule() {
       {branchesQuery.data ? (
         <DataTable
           columns={columns}
-          data={branchesQuery.data.data}
+          data={visibleBranches}
           emptyTitle={t("branches.noBranches")}
         />
       ) : null}

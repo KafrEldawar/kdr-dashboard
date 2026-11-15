@@ -10,7 +10,7 @@
  * {
  *   ts: iso,
  *   services: {
- *     whatsapp:      { status, latencyMs, detail?, error? }
+ *     otp:           { status, latencyMs, detail?, error? }   (phone-login funnel)
  *     supabase:      { ... }
  *     edgeFunctions: { ... }
  *   },
@@ -21,6 +21,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/server/require-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -44,52 +45,105 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ]);
 }
 
-async function probeWhatsapp(): Promise<ServiceReport> {
-  const url   = process.env.WA_SERVICE_URL;
-  const token = process.env.WA_ADMIN_TOKEN;
-  if (!url || !token) {
-    return { status: "unconfigured", latencyMs: null, error: "WA_SERVICE_URL/WA_ADMIN_TOKEN not set" };
+/**
+ * Health of phone login — the thing users actually feel.
+ *
+ * Login runs on wasage's user-initiated WhatsApp flow (the old Railway /
+ * Baileys sender is retired), so "is WhatsApp up?" is answered from our
+ * own `wasage_verifications` funnel rather than by pinging a sender:
+ *
+ *   • success   — `verified` / `consumed` (the webhook confirmed the number)
+ *   • no reply  — `pending` past its 10-minute TTL, or `expired`: the user
+ *                 sent the token and wasage never called back. This is the
+ *                 "I sent the code and nothing happened" failure.
+ *   • mismatch  — confirmed from a different WhatsApp number than typed
+ *   • failed    — wasage refused to open the verification at all
+ *
+ * Attempts younger than the TTL are still in flight and not counted.
+ */
+const OTP_TTL_MS = 10 * 60 * 1000;
+
+async function probeOtp(): Promise<ServiceReport> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    return { status: "unconfigured", latencyMs: null, error: "SUPABASE_SERVICE_ROLE_KEY not set" };
   }
   const t0 = Date.now();
   try {
-    const res = await withTimeout(
-      fetch(`${url.replace(/\/$/, "")}/session/status`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      }),
+    const client = createClient(url, key, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const now = Date.now();
+    const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+
+    const [rowsRes, lastOkRes] = await withTimeout(
+      Promise.all([
+        client
+          .from("wasage_verifications")
+          .select("status, created_at")
+          .gte("created_at", since24h)
+          .limit(10_000),
+        client
+          .from("wasage_verifications")
+          .select("verified_at")
+          .in("status", ["verified", "consumed"])
+          .order("verified_at", { ascending: false, nullsFirst: false })
+          .limit(1),
+      ]),
       PROBE_TIMEOUT_MS,
-      "whatsapp",
+      "otp",
     );
     const latencyMs = Date.now() - t0;
-    if (!res.ok) {
-      return { status: "down", latencyMs, error: `HTTP ${res.status}` };
+    if (rowsRes.error) {
+      return { status: "down", latencyMs, error: rowsRes.error.message };
     }
-    const body = await res.json().catch(() => ({}));
-    const connected = body?.connected === true;
-    if (connected) {
-      return {
-        status: "ok",
-        latencyMs,
-        detail: `متصل${body?.phone ? ` — ${body.phone}` : ""}`,
-      };
+
+    type Row = { status: string; created_at: string };
+    const settled = ((rowsRes.data ?? []) as Row[]).filter(
+      (r) => r.status !== "pending" || now - new Date(r.created_at).getTime() > OTP_TTL_MS,
+    );
+    const tally = (rows: Row[]) => {
+      let ok = 0, noReply = 0, mismatch = 0, failed = 0;
+      for (const r of rows) {
+        if (r.status === "verified" || r.status === "consumed") ok++;
+        else if (r.status === "mismatch") mismatch++;
+        else if (r.status === "failed") failed++;
+        else noReply++; // pending past TTL, or expired
+      }
+      return { total: rows.length, ok, noReply, mismatch, failed };
+    };
+    const day = tally(settled);
+    const hour = tally(
+      settled.filter((r) => now - new Date(r.created_at).getTime() <= 60 * 60 * 1000),
+    );
+
+    const lastOk = (lastOkRes.data?.[0] as { verified_at?: string } | undefined)?.verified_at;
+    const lastOkLabel = lastOk
+      ? new Date(lastOk).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" })
+      : "مفيش";
+    const rate = day.total ? Math.round((day.ok / day.total) * 100) : null;
+    const detail =
+      `آخر 24 ساعة: ${day.ok} من ${day.total} أكدوا (${rate ?? "—"}%) · ` +
+      `بدون رد من wasage: ${day.noReply} · رقم مختلف: ${day.mismatch}` +
+      (day.failed ? ` · فشل الفتح: ${day.failed}` : "") +
+      ` · آخر تأكيد ناجح: ${lastOkLabel}`;
+
+    if (hour.failed > 0 && hour.ok === 0) {
+      return { status: "down", latencyMs, detail, error: "wasage بيرفض يفتح طلبات تحقق جديدة" };
     }
-    // `paired` distinguishes the two disconnected states: false means
-    // the session creds are gone and nothing recovers without an
-    // operator scanning a QR (hard down); true means the session is
-    // valid and the sender is reconnecting on its own (degraded).
-    // Older sender builds don't send the field — keep the legacy label.
-    if (body?.paired === false) {
+    if (hour.total >= 3 && hour.ok === 0) {
       return {
         status: "down",
         latencyMs,
-        detail: "غير مرتبط — يحتاج مسح QR من صفحة واتساب",
+        detail,
+        error: `محدش قدر يأكد رقمه في آخر ساعة (${hour.total} محاولة) — wasage مش بيرد على الرسائل`,
       };
     }
-    return {
-      status: "degraded",
-      latencyMs,
-      detail: body?.paired === true ? "الجلسة سليمة — بيعيد الاتصال…" : "بانتظار مسح QR",
-    };
+    if (day.total >= 5 && rate !== null && rate < 50) {
+      return { status: "degraded", latencyMs, detail };
+    }
+    return { status: "ok", latencyMs, detail };
   } catch (err) {
     return { status: "down", latencyMs: Date.now() - t0, error: (err as Error).message };
   }
@@ -132,11 +186,11 @@ async function probeEdgeFunctions(): Promise<ServiceReport> {
   }
   const t0 = Date.now();
   try {
-    // OPTIONS to send-otp: proves the edge runtime is up and CORS is
-    // configured without firing an actual OTP send. Any 2xx/3xx means
-    // the function boot succeeded.
+    // OPTIONS to wasage-start (the live login entry point): proves the
+    // edge runtime is up and CORS is configured without opening a real
+    // verification. Any non-5xx means the function booted.
     const res = await withTimeout(
-      fetch(`${url.replace(/\/$/, "")}/functions/v1/send-otp`, {
+      fetch(`${url.replace(/\/$/, "")}/functions/v1/wasage-start`, {
         method:  "OPTIONS",
         headers: { "Access-Control-Request-Method": "POST" },
       }),
@@ -171,8 +225,8 @@ async function readEventFeed(): Promise<{
     });
     // We're already server-side under service_role, so the is_admin()
     // guard in the RPCs would fail (service_role has no auth.uid()).
-    // Read the table directly instead — the /api route itself is the
-    // access-control boundary.
+    // Read the table directly instead — the route's requireAdmin() check
+    // in GET is the access-control boundary.
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const eventsRes = await client
       .from("system_events")
@@ -217,9 +271,12 @@ async function readEventFeed(): Promise<{
   }
 }
 
-export async function GET() {
-  const [whatsapp, supabase, edgeFunctions, feed] = await Promise.all([
-    probeWhatsapp(),
+export async function GET(request: Request) {
+  const denied = await requireAdmin(request);
+  if (denied) return denied;
+
+  const [otp, supabase, edgeFunctions, feed] = await Promise.all([
+    probeOtp(),
     probeSupabase(),
     probeEdgeFunctions(),
     readEventFeed(),
@@ -228,7 +285,7 @@ export async function GET() {
   return NextResponse.json(
     {
       ts:       new Date().toISOString(),
-      services: { whatsapp, supabase, edgeFunctions },
+      services: { otp, supabase, edgeFunctions },
       summary:  feed.summary,
       events:   feed.events,
       feedError: feed.error,

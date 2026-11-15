@@ -1,0 +1,12 @@
+{
+  "name": "kdr-migration-tests",
+  "private": true,
+  "type": "module",
+  "description": "Runs migrations against an in-memory Postgres (PGlite) with a minimal stub of the live schema.",
+  "scripts": {
+    "test:081": "node 081_test.mjs 081_stub_schema.sql ../../supabase/migrations/081_security_and_checkout_hardening.sql"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.2.17"
+  }
+}

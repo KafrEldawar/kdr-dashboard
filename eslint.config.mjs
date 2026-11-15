@@ -11,7 +11,15 @@ const compat = new FlatCompat({
 
 const eslintConfig = [
   {
-    ignores: [".next/**", "node_modules/**", "next-env.d.ts"],
+    ignores: [
+      ".next/**",
+      "node_modules/**",
+      "next-env.d.ts",
+      // Deno edge functions + migration tooling: a different runtime with
+      // its own linter (`deno lint`, which honours their
+      // `deno-lint-ignore` directives). The Next.js rules don't apply.
+      "KDR-supabase/**",
+    ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
