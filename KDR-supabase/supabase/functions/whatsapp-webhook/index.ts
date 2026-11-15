@@ -22,7 +22,7 @@
  *           WHATSAPP_WEBHOOK_VERIFY_TOKEN, WHATSAPP_APP_SECRET
  */
 
-import { serviceClient } from "./_shared/supabase.ts";
+import { serviceClient } from "../_shared/supabase.ts";
 
 // Later stages must not overwrite earlier terminal info out of order:
 // a late "delivered" must not clobber "read"; "failed" always wins.

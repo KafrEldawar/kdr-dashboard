@@ -7,6 +7,10 @@
  * in profiles, and sign the user in via signInWithPassword({ email }).
  * The end user never sees the email.
  *
+ * The account resolution and session minting live in _shared/session.ts
+ * (shared with wasage-complete and firebase-phone-complete) — this file
+ * only checks the code.
+ *
  * Uniqueness contract (post-051): a phone number can belong to at most
  * one account, counting both `profiles.phone` and `profiles.alternate_phone`.
  * The migration enforces this at the DB level via a UNIQUE partial index
@@ -15,11 +19,11 @@
  * constraint violation.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { CORS, json }                from "./_shared/cors.ts";
-import { serviceClient, userIdFromAuthHeader } from "./_shared/supabase.ts";
-import { normalizeE164 }             from "./_shared/phone.ts";
-import { verifyCode }                from "./_shared/otp.ts";
+import { CORS, json }                from "../_shared/cors.ts";
+import { serviceClient, userIdFromAuthHeader } from "../_shared/supabase.ts";
+import { normalizeE164 }             from "../_shared/phone.ts";
+import { verifyCode }                from "../_shared/otp.ts";
+import { attachPhoneToUser, mintSessionForPhone } from "../_shared/session.ts";
 
 interface OtpRow {
   id: string;
@@ -28,12 +32,6 @@ interface OtpRow {
   max_attempts: number;
   expires_at: string;
   consumed_at: string | null;
-}
-
-const SYNTHETIC_EMAIL_DOMAIN = "phone.kdr.app";
-
-function syntheticEmailFor(phone: string): string {
-  return `${phone.replace(/^\+/, "")}@${SYNTHETIC_EMAIL_DOMAIN}`;
 }
 
 Deno.serve(async (req) => {
@@ -92,153 +90,33 @@ Deno.serve(async (req) => {
 
     // ── Attached-mode branch (existing session) ───────────────────
     // OAuth users finish complete-profile then come through here to
-    // attach a primary phone. Refuse if the phone is already on
-    // another account (primary or alternate) — otherwise the unique
-    // index on profiles.phone (added in 051) would surface as a 500.
+    // attach a primary phone. The shared helper refuses a phone that is
+    // already on another account (primary or alternate) and keeps a
+    // phone-first account's synthetic email in step with the new number.
     const existingUserId = await userIdFromAuthHeader(req);
     if (existingUserId) {
-      const { data: clash } = await svc
-        .from("profiles")
-        .select("id")
-        .or(`phone.eq.${phone},alternate_phone.eq.${phone}`)
-        .neq("id", existingUserId)
-        .limit(1)
-        .maybeSingle();
-      if (clash) {
-        return json({ ok: false, reason: "phone_in_use" }, 409);
-      }
-
-      await svc
-        .from("profiles")
-        .update({ phone, phone_verified_at: new Date().toISOString() })
-        .eq("id", existingUserId);
+      const res = await attachPhoneToUser(svc, phone, existingUserId);
+      if (!res.ok) return json({ ok: false, reason: res.reason }, 409);
       return json({ ok: true, mode: "attached" });
     }
 
     // ── Signup / phone-first sign-in branch ──────────────────────
-    // Look up an existing auth.user by either the synthetic email or
-    // an existing profile with this phone.
-    const syntheticEmail = syntheticEmailFor(phone);
-
-    // 1) Try profiles.phone — covers existing users whose phone was
-    //    attached to a different (real) email.
-    const { data: profileMatch } = await svc
-      .from("profiles")
-      .select("id")
-      .eq("phone", phone)
-      .maybeSingle();
-    let userId: string | null = profileMatch?.id ?? null;
-    let userEmail: string | null = null;
-
-    // 2) If still not found, look up by the synthetic email.
-    if (!userId) {
-      const { data: list } = await svc.auth.admin.listUsers({ page: 1, perPage: 200 });
-      const m = list?.users?.find((u) => (u.email ?? "").toLowerCase() === syntheticEmail);
-      if (m) {
-        userId = m.id;
-        userEmail = m.email ?? null;
-      }
-    }
-
-    // 3) Last guard: if no existing user matched the primary phone or
-    //    the synthetic email, this would be a brand-new signup. Refuse
-    //    if the number is already on someone's profile as their
-    //    ALTERNATE phone — otherwise the new user's phone write would
-    //    clash with the alternate-phone uniqueness from 043 and leave
-    //    a half-created account.
-    if (!userId) {
-      const { data: altClash } = await svc
-        .from("profiles")
-        .select("id")
-        .eq("alternate_phone", phone)
-        .limit(1)
-        .maybeSingle();
-      if (altClash) {
-        return json({ ok: false, reason: "phone_in_use" }, 409);
-      }
-    }
-
-    let needsOnboarding = false;
-    const randomPassword = strongRandomPassword();
-
-    if (userId) {
-      // Look up the user's actual email so we know what to sign in with.
-      if (!userEmail) {
-        const { data: u } = await svc.auth.admin.getUserById(userId);
-        userEmail = u?.user?.email ?? null;
-      }
-      // If for some reason the user has no email at all, give them the
-      // synthetic one so signInWithPassword works.
-      if (!userEmail) {
-        await svc.auth.admin.updateUserById(userId, { email: syntheticEmail, email_confirm: true });
-        userEmail = syntheticEmail;
-      }
-      await svc.auth.admin.updateUserById(userId, { password: randomPassword });
-      await svc
-        .from("profiles")
-        .update({ phone, phone_verified_at: new Date().toISOString() })
-        .eq("id", userId);
-    } else {
-      // Brand-new user.
-      const { data: created, error: createErr } = await svc.auth.admin.createUser({
-        email:          syntheticEmail,
-        password:       randomPassword,
-        email_confirm:  true,
-      });
-      if (createErr || !created?.user) {
-        return json({ ok: false, error: createErr?.message ?? "createUser failed" }, 500);
-      }
-      userId = created.user.id;
-      userEmail = syntheticEmail;
-      needsOnboarding = true;
-
-      // The handle_new_user trigger writes a profiles row. Add the
-      // verified phone on top.
-      await svc
-        .from("profiles")
-        .update({ phone, phone_verified_at: new Date().toISOString() })
-        .eq("id", userId);
-    }
-
-    // Mint a session via signInWithPassword on the (real or synthetic) email.
-    const anonClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { persistSession: false, autoRefreshToken: false } },
-    );
-    const { data: signin, error: signinErr } = await anonClient.auth.signInWithPassword({
-      email:    userEmail!,
-      password: randomPassword,
-    });
-    if (signinErr || !signin?.session) {
-      return json({ ok: false, error: signinErr?.message ?? "signInWithPassword failed" }, 500);
+    // Same account resolution + session minting as wasage-complete and
+    // firebase-phone-complete (see _shared/session.ts).
+    const res = await mintSessionForPhone(svc, phone);
+    if (!res.ok) {
+      const status = res.reason === "phone_in_use" ? 409 : 500;
+      return json({ ok: false, reason: res.reason, error: res.error }, status);
     }
 
     return json({
       ok: true,
       mode: "signed_in",
-      needs_onboarding: needsOnboarding,
-      session: {
-        access_token:  signin.session.access_token,
-        refresh_token: signin.session.refresh_token,
-        expires_in:    signin.session.expires_in,
-        expires_at:    signin.session.expires_at,
-        token_type:    signin.session.token_type,
-      },
-      user: {
-        id:    signin.user?.id,
-        phone,
-        email: signin.user?.email,
-      },
+      needs_onboarding: res.needsOnboarding,
+      session: res.session,
+      user: res.user,
     });
   } catch (err) {
     return json({ ok: false, error: (err as Error).message }, 500);
   }
 });
-
-function strongRandomPassword(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}

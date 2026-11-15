@@ -34,13 +34,13 @@
  *           legacy: WA_SHARED_SECRET, WA_SERVICE_URL
  */
 
-import { CORS, json }          from "./_shared/cors.ts";
-import { serviceClient, userIdFromAuthHeader } from "./_shared/supabase.ts";
-import { normalizeE164 }       from "./_shared/phone.ts";
-import { checkAndIncrement, refundSend } from "./_shared/rateLimit.ts";
-import { generateCode, hashCode } from "./_shared/otp.ts";
-import { callRailway }         from "./_shared/hmac.ts";
-import { cloudApiConfigured, sendOtpTemplate } from "./_shared/whatsapp.ts";
+import { CORS, json }          from "../_shared/cors.ts";
+import { serviceClient, userIdFromAuthHeader } from "../_shared/supabase.ts";
+import { normalizeE164 }       from "../_shared/phone.ts";
+import { checkAndIncrement, refundSend } from "../_shared/rateLimit.ts";
+import { generateCode, hashCode } from "../_shared/otp.ts";
+import { callRailway }         from "../_shared/hmac.ts";
+import { cloudApiConfigured, sendOtpTemplate } from "../_shared/whatsapp.ts";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 
