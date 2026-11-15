@@ -20,6 +20,14 @@ getting no reply at all means wasage never handled the inbound message.
 That points at wasage's receiving number (+971 50 126 3864) or the wasage
 account (balance/plan). **Check the wasage console first** (see the end).
 
+**Live data, read on 2026-11-15:** the last successful wasage confirmation
+was **2026-10-05 13:29 UTC**. Since then there have been 136 attempts from 74
+people, all stuck at `pending`, so phone login has been down for six weeks.
+In the last 24 h the webhook received two calls, both rejected 401, against 9
+attempts: wasage isn't calling back. Other live facts behind this work: 265
+auth users (past the old 200-user lookup), 43 of 49 branches without a map
+pin, and one customer who used the same voucher twice.
+
 What we changed so a wasage outage stops locking people out:
 
 | Where | Change |
